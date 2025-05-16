@@ -14,4 +14,15 @@ button_config_sound[0][1] = root_location+"yes_ใช่.wav"
 button_config_sound[1][1] = root_location+"no_ไม่ใช่.wav"
 button_config_sound[2][1] = root_location+"ThankYou_ขอบคุณ.wav"
 button_config_sound[3][1] = root_location+"mum_แม่.wav"
+button_sound =  [0 for i in range(button_rows*button_colums)]
+button_sound[0] = root_location+"milk_นม.wav"
+button_sound[1] = root_location+"water_น้ำ.wav"
+button_sound[2] = root_location+"snack_ขนม.wav"
+button_sound[3] = root_location+"play_Pim_เล่น.wav"
+button_sound[4] = root_location+"mum_แม่.wav"
+button_sound[5] = root_location+"yes_ใช่.wav"
+button_sound[6] = root_location+"no_ไม่ใช่.wav"
+button_sound[7] = root_location+"ThankYou_ขอบคุณ.wav"
+
+
 print (button_config_sound)
