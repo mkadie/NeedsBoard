@@ -19,6 +19,6 @@ def get_sorted_bmp_files(directory):
 
 # Execute example usage only if the script is run directly
 if __name__ == "__main__":
-    directory_path = "C:/Users/live/OneDrive/assistive/NeedsBoard/lcd_images"  # Replace with your directory path
+    directory_path = "C:/Users/live/OneDrive/assistive/git/NeedsBoard/lcd_images"  # Replace with your directory path
     bmp_files = get_sorted_bmp_files(directory_path)
     print(bmp_files)
