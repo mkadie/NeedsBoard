@@ -46,7 +46,7 @@ class Action:
     """
 
     def __init__(self, audio=None, display=None, pixel=None,
-                 menus_dir="/menus"):
+                 menus_dir="/menus", storage=None):
         """Set up action executor with hardware references.
 
         Args:
@@ -54,11 +54,13 @@ class Action:
             display: DisplayManager instance (or None).
             pixel: NeoPixel object (or None if no status LED).
             menus_dir: Base directory for resolving relative paths.
+            storage: StorageManager instance (or None if no SD card).
         """
         self._audio = audio
         self._display = display
         self._pixel = pixel
         self._menus_dir = menus_dir
+        self._storage = storage
 
     def execute(self, item):
         """Execute all actions defined in a press item dict.
@@ -116,10 +118,14 @@ class Action:
         return None
 
     def _resolve_path(self, path):
-        """Resolve a menu-relative path to absolute."""
-        if not path or path.startswith("/"):
+        """Resolve a menu-relative path to absolute, checking SD card first."""
+        if not path:
             return path
-        return self._menus_dir + "/" + path
+        if not path.startswith("/"):
+            path = self._menus_dir + "/" + path
+        if self._storage:
+            return self._storage.resolve_path(path)
+        return path
 
     def _do_sound(self, item):
         """Play a sound file if specified."""

@@ -20,11 +20,13 @@ def _pin(name):
 class DisplayManager:
     """Manages ILI9341 display, background image, and button grid geometry."""
 
-    def __init__(self, config):
+    def __init__(self, config, spi=None):
         """Initialize display hardware from config dict.
 
         Args:
             config: Hardware config dictionary.
+            spi: Optional shared SPI bus (e.g., from StorageManager when
+                 SD card shares the display SPI bus). If None, creates its own.
         """
         self._config = config
         self._width = config["screen_width"]
@@ -36,12 +38,15 @@ class DisplayManager:
 
         displayio.release_displays()
 
-        # SPI bus
-        spi_kwargs = {"MOSI": _pin(config["lcd_mosi"])}
-        miso = _pin(config.get("lcd_miso"))
-        if miso:
-            spi_kwargs["MISO"] = miso
-        self._spi = busio.SPI(_pin(config["lcd_sclk"]), **spi_kwargs)
+        # SPI bus — use shared bus if provided, otherwise create one
+        if spi is not None:
+            self._spi = spi
+        else:
+            spi_kwargs = {"MOSI": _pin(config["lcd_mosi"])}
+            miso = _pin(config.get("lcd_miso"))
+            if miso:
+                spi_kwargs["MISO"] = miso
+            self._spi = busio.SPI(_pin(config["lcd_sclk"]), **spi_kwargs)
 
         # FourWire display bus
         fw_kwargs = {

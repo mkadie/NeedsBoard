@@ -34,6 +34,14 @@ VARIANTS = {
         "amp_en_pin": "GPIO1",
         "amp_en_active_low": True,
 
+        # SD Card (no onboard slot; set True if external breakout wired)
+        "sd_card": False,
+        "sd_cs": None,
+        "sd_sclk": None,
+        "sd_mosi": None,
+        "sd_miso": None,
+        "sd_shares_display_spi": False,
+
         # Shared I2C bus (touch + codec)
         "i2c_scl": "GPIO15",
         "i2c_sda": "GPIO16",
@@ -106,6 +114,14 @@ VARIANTS = {
         "i2s_mclk": None,
         "amp_en_pin": None,
         "amp_en_active_low": False,
+
+        # SD Card (shares SPI bus with display)
+        "sd_card": True,
+        "sd_cs": "GP21",
+        "sd_sclk": "GP14",
+        "sd_mosi": "GP15",
+        "sd_miso": "GP12",
+        "sd_shares_display_spi": True,
 
         # I2C
         "i2c_scl": "GP17",

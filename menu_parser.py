@@ -113,8 +113,10 @@ class MenuStack:
     Tracks menu history so "back" returns to the previous menu.
     """
 
-    def __init__(self, menus_dir="/menus", start_menu="base.menu"):
+    def __init__(self, menus_dir="/menus", start_menu="base.menu",
+                 storage=None):
         self._menus_dir = menus_dir
+        self._storage = storage
         self._stack = []
         self._current_header = None
         self._current_items = None
@@ -123,6 +125,8 @@ class MenuStack:
     def load(self, menu_filename):
         """Load a menu file and push it onto the navigation stack."""
         path = self._menus_dir + "/" + menu_filename
+        if self._storage:
+            path = self._storage.resolve_path(path)
         print("Loading menu:", path)
         header, items = parse_menu_file(path)
         self._stack.append(menu_filename)

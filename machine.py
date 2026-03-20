@@ -8,6 +8,7 @@ import time
 import busio
 import board
 from hardware_config import VARIANTS, DEFAULT_VARIANT
+from storage_manager import StorageManager
 from display_manager import DisplayManager
 from audio_player import AudioPlayer
 from input_manager import InputManager
@@ -53,6 +54,14 @@ class Machine:
             self._pixel = neopixel.NeoPixel(neo_pin, 1, brightness=0.05, auto_write=True)
         self.set_status("init")
 
+        # Storage manager — mounts SD card, creates shared SPI bus
+        # Must be initialized BEFORE display (SD card needs SPI first)
+        self.storage = StorageManager(self._config)
+
+        # Sync flash content to SD card if SD is available and new
+        if self.storage.sd_available:
+            self.storage.sync_flash_to_sd()
+
         # Shared I2C bus (touch + codec may share it)
         self._i2c = None
         scl = _pin(self._config.get("i2c_scl"))
@@ -60,8 +69,9 @@ class Machine:
         if scl and sda:
             self._i2c = busio.I2C(scl, sda, frequency=self._config.get("i2c_freq", 400_000))
 
-        # Hardware subsystems
-        self.display = DisplayManager(self._config)
+        # Display — pass shared SPI bus if SD card shares it
+        spi = self.storage.spi if self._config.get("sd_shares_display_spi") else None
+        self.display = DisplayManager(self._config, spi=spi)
         print("Display ready")
 
         self.audio = AudioPlayer(self._config, i2c=self._i2c)
@@ -70,12 +80,13 @@ class Machine:
         self.input = InputManager(self._config, self.display, i2c=self._i2c)
         print("Input ready")
 
-        # Action executor
+        # Action executor — uses storage for SD-first path resolution
         self.action = Action(
             audio=self.audio,
             display=self.display,
             pixel=self._pixel,
             menus_dir=menus_dir,
+            storage=self.storage,
         )
 
         # Sleep / power management
@@ -89,7 +100,8 @@ class Machine:
         self._grid = None
         self._use_legacy = False
         try:
-            self._menu_stack = MenuStack(menus_dir, start_menu)
+            self._menu_stack = MenuStack(menus_dir, start_menu,
+                                         storage=self.storage)
             self._build_grid()
             self._update_display()
             print("Menu loaded:", self._menu_stack.name)
@@ -119,6 +131,8 @@ class Machine:
         cfg = self._config
         print("AAC Device ready")
         print("Grid:", cfg["button_cols"], "x", cfg["button_rows"])
+        if self.storage.sd_available:
+            print("Storage: SD card active")
         if self._use_legacy:
             print("Mode: legacy (button_config.py)")
             print("Sounds:", len(self._legacy_sounds), "configured")
@@ -193,10 +207,15 @@ class Machine:
 
         Paths starting with / are already absolute.
         Other paths are relative to the menus directory.
+        Then checks SD card via storage manager.
         """
-        if not path or path.startswith("/"):
+        if not path:
             return path
-        return self._menus_dir + "/" + path
+        if not path.startswith("/"):
+            path = self._menus_dir + "/" + path
+        if self.storage:
+            return self.storage.resolve_path(path)
+        return path
 
     def _update_display(self):
         """Update the display background for the current menu."""
