@@ -95,8 +95,7 @@ class SleepManager:
         if elapsed < self._timeout:
             return False
 
-        # Time to sleep
-        print("Sleep: inactivity timeout ({}s)".format(int(elapsed)))
+        print("Sleep: timeout after {}s inactivity".format(int(elapsed)))
         return self._enter_sleep()
 
     @property
