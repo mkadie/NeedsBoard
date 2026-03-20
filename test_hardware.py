@@ -641,6 +641,115 @@ def test_wake(config):
 
 
 # ---------------------------------------------------------------------------
+# Test 9: Sleep / Wake
+# ---------------------------------------------------------------------------
+
+def test_sleep(config):
+    """Test sleep mode: power down peripherals, sleep 5s or until touch/button.
+
+    Bypasses the USB-connected check so you can test without a battery.
+    NOTE: On USB, light sleep may cause a soft reboot — that is expected
+    and counts as a PASS (the device woke up).
+    """
+    section("TEST: Sleep / Wake")
+
+    if not config.get("sleep_enabled", False):
+        skip("Sleep", "sleep_enabled=False")
+        return
+
+    import alarm
+    import alarm.pin
+    import alarm.time
+    import neopixel
+
+    # Turn off NeoPixel
+    neo_pin = _pin(config.get("neopixel_pin"))
+    pixel = None
+    if neo_pin:
+        pixel = neopixel.NeoPixel(neo_pin, 1, brightness=0.05, auto_write=True)
+        pixel[0] = (0, 0, 0)
+        test("NeoPixel off", True)
+
+    # Turn off backlight
+    bl_pin = _pin(config.get("lcd_backlight"))
+    if bl_pin:
+        bl = digitalio.DigitalInOut(bl_pin)
+        bl.switch_to_output(value=False)
+        bl.deinit()
+        test("Backlight off", True)
+
+    # Disable amplifier
+    amp_pin = _pin(config.get("amp_en_pin"))
+    if amp_pin:
+        amp = digitalio.DigitalInOut(amp_pin)
+        active_low = config.get("amp_en_active_low", True)
+        amp.switch_to_output(value=active_low)  # Disabled state
+        amp.deinit()
+        test("Amplifier disabled", True)
+
+    # Build wake alarms
+    alarms = []
+
+    # Timer alarm: 5 second safety net
+    timer_alarm = alarm.time.TimeAlarm(monotonic_time=time.monotonic() + 5)
+    alarms.append(timer_alarm)
+    print("  Timer alarm: 5 seconds")
+
+    # Pin alarms for touch and boot button
+    for pin_name in config.get("sleep_wake_pins", []):
+        pin = _pin(pin_name)
+        if pin:
+            a = alarm.pin.PinAlarm(pin=pin, value=False, pull=True)
+            alarms.append(a)
+            print("  Pin alarm:", pin_name)
+
+    test("Wake alarms configured ({})".format(len(alarms)), len(alarms) > 0)
+
+    # Enter light sleep
+    print()
+    print("  >>> ENTERING LIGHT SLEEP <<<")
+    print("  Screen will go dark for up to 5 seconds.")
+    print("  Touch the screen or press BOOT to wake early.")
+    print()
+    time.sleep(0.5)  # Let serial flush
+
+    triggered = alarm.light_sleep_until_alarms(*alarms)
+
+    # If we get here, light sleep worked and we woke up
+    print()
+    print("  >>> WOKE UP <<<")
+    if triggered:
+        print("  Wake source:", triggered)
+        if isinstance(triggered, alarm.time.TimeAlarm):
+            test("Wake from timer (5s elapsed)", True)
+        elif isinstance(triggered, alarm.pin.PinAlarm):
+            test("Wake from pin (touch or button)", True)
+        else:
+            test("Wake from unknown source", True)
+    else:
+        test("Wake (no alarm info)", True)
+
+    # Restore backlight
+    if bl_pin:
+        bl = digitalio.DigitalInOut(bl_pin)
+        bl.switch_to_output(value=True)
+        bl.deinit()
+        test("Backlight restored", True)
+
+    # Restore NeoPixel
+    if pixel:
+        pixel[0] = (0, 255, 0)  # Green = pass
+        test("NeoPixel restored", True)
+
+    # Restore amplifier
+    if amp_pin:
+        amp = digitalio.DigitalInOut(amp_pin)
+        active_low = config.get("amp_en_active_low", True)
+        amp.switch_to_output(value=not active_low)  # Enabled state
+        amp.deinit()
+
+
+# ---------------------------------------------------------------------------
 # Test Runner
 # ---------------------------------------------------------------------------
 
@@ -714,6 +823,10 @@ def run_all(variant_name=None):
 
     if should_run("wake"):
         test_wake(config)
+        gc.collect()
+
+    if should_run("sleep"):
+        test_sleep(config)
         gc.collect()
 
     # Summary
