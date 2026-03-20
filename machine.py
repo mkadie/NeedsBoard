@@ -13,6 +13,7 @@ from audio_player import AudioPlayer
 from input_manager import InputManager
 from menu_parser import MenuStack, get_grid_items, get_sorted_items
 from action import Action
+from sleep_manager import SleepManager
 
 
 def _pin(name):
@@ -77,6 +78,11 @@ class Machine:
             menus_dir=menus_dir,
         )
 
+        # Sleep / power management
+        self.sleep = SleepManager(self._config)
+        self.sleep.set_pixel(self._pixel)
+        self.sleep.set_input(self.input)
+
         # Menu system — try to load from .menu files, fall back to button_config
         self._menu_stack = None
         self._grid = None
@@ -124,7 +130,10 @@ class Machine:
         while True:
             button = self.input.poll()
             if button is not None:
+                self.sleep.activity()
                 self._handle_press(button)
+            else:
+                self.sleep.check()
             time.sleep(0.01)
 
     def _handle_press(self, button_index):

@@ -63,6 +63,19 @@ VARIANTS = {
         "button_cols": 4,
         "button_rows": 2,
         "debounce_time": 0.5,
+
+        # Sleep / power saving
+        # sleep_enabled: True to auto-sleep after inactivity
+        # sleep_timeout: seconds of inactivity before sleeping
+        # sleep_mode: "light" (fast wake, program resumes) or
+        #             "deep" (lowest power, full restart on wake)
+        # sleep_wake_pins: list of pin names that wake the device
+        #   - touch_int pin wakes on screen touch
+        #   - wake_button_pin wakes on boot button press
+        "sleep_enabled": True,
+        "sleep_timeout": 120,
+        "sleep_mode": "light",
+        "sleep_wake_pins": ["GPIO0", "GPIO17"],
     },
 
     "TALKER_PICO2": {
@@ -126,6 +139,13 @@ VARIANTS = {
         "button_cols": 4,
         "button_rows": 2,
         "debounce_time": 0.5,
+
+        # Sleep / power saving
+        # RP2040/RP2350 does not support alarm module — sleep disabled
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "light",
+        "sleep_wake_pins": [],
     },
 }
 

@@ -239,6 +239,22 @@ class InputManager:
                 return self._wake_button_index
         return None
 
+    def deinit_for_sleep(self):
+        """Release GPIO pins so alarm module can use them for wake."""
+        if self._wake_button:
+            self._wake_button.deinit()
+            self._wake_button = None
+
+    def reinit_after_sleep(self):
+        """Reclaim GPIO pins after waking from light sleep."""
+        config = self._config
+        if config.get("wake_button_pin"):
+            pin = _pin(config["wake_button_pin"])
+            self._wake_button = digitalio.DigitalInOut(pin)
+            self._wake_button.direction = digitalio.Direction.INPUT
+            self._wake_button.pull = digitalio.Pull.UP
+            self._last_wake = self._wake_button.value
+
     @property
     def debug(self):
         return self._debug
