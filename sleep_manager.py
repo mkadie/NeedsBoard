@@ -10,9 +10,19 @@ Supports two sleep modes:
 
 import time
 import board
-import alarm
-import alarm.pin
-import supervisor
+
+try:
+    import alarm
+    import alarm.pin
+    _HAS_ALARM = True
+except ImportError:
+    _HAS_ALARM = False
+
+try:
+    import supervisor
+    _HAS_SUPERVISOR = True
+except ImportError:
+    _HAS_SUPERVISOR = False
 
 
 def _pin(name):
@@ -49,11 +59,16 @@ class SleepManager:
         self._amp_active_low = config.get("amp_en_active_low", True)
         self._touch_rst_pin_name = config.get("touch_rst")
 
+        # Disable if alarm module is not available (RP2040/RP2350)
+        if self._enabled and not _HAS_ALARM:
+            print("Sleep: alarm module not available — disabled")
+            self._enabled = False
+
         if self._enabled:
             print("Sleep: enabled, timeout={}s, mode={}".format(
                 self._timeout, self._mode))
             print("Sleep: wake pins:", self._wake_pin_names)
-            if supervisor.runtime.usb_connected:
+            if _HAS_SUPERVISOR and supervisor.runtime.usb_connected:
                 print("Sleep: USB connected — sleep suspended until unplugged")
         else:
             print("Sleep: disabled")
@@ -88,7 +103,7 @@ class SleepManager:
         # Don't sleep while connected to USB — light sleep causes
         # USB disconnect which triggers auto-reload (looks like a reboot).
         # On battery (the target use case) this check is False.
-        if supervisor.runtime.usb_connected:
+        if _HAS_SUPERVISOR and supervisor.runtime.usb_connected:
             return False
 
         elapsed = time.monotonic() - self._last_activity

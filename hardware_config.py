@@ -78,8 +78,8 @@ VARIANTS = {
         "sleep_wake_pins": ["GPIO0", "GPIO17"],
     },
 
-    "TALKER_PICO2": {
-        "name": "TALKER_PICO2",
+    "RP2350_V2": {
+        "name": "RP2350_V2",
 
         # Display
         "display_type": "ILI9341",
