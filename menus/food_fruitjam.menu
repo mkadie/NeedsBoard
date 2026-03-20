@@ -1,0 +1,63 @@
+# ===================================================
+#  Food & Drink Menu — FruitJam V2 (3x2 grid)
+#
+#  Reached from the "More" button on the base menu.
+#
+#  Layout (3 columns × 2 rows):
+#
+#  +----------+----------+----------+
+#  |  Water   |  Apple   |   Milk   |
+#  |    1     |    2     |    3     |
+#  +----------+----------+----------+
+#  |  Banana  | Cracker  |  ← Back  |
+#  |    4     |    5     |    6     |
+#  +----------+----------+----------+
+# ===================================================
+
+[menu]
+name = Food & Drink
+type = grid
+columns = 3
+rows = 2
+back = base_fruitjam.menu
+background = images/food/food_board.bmp
+
+# ----- Top Row -----
+
+[water]
+label = Water
+image = images/food/water.bmp
+sound = sounds/food/water.mp3
+position = 1
+
+[apple]
+label = Apple
+image = images/food/apple.bmp
+sound = sounds/food/apple.mp3
+position = 2
+
+[milk]
+label = Milk
+image = images/food/milk.bmp
+sound = sounds/food/milk.mp3
+position = 3
+
+# ----- Bottom Row -----
+
+[banana]
+label = Banana
+image = images/food/banana.bmp
+sound = sounds/food/banana.mp3
+position = 4
+
+[cracker]
+label = Cracker
+image = images/food/cracker.bmp
+sound = sounds/food/cracker.mp3
+position = 5
+
+[back_button]
+label = Back
+image = images/food/back.bmp
+position = 6
+back =

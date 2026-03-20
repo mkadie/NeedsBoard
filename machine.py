@@ -46,6 +46,11 @@ class Machine:
         self._menus_dir = menus_dir
         print("AAC Device — variant:", self._config["name"])
 
+        # Fruit Jam Peripherals (must init before anything else on FruitJam)
+        self._peripherals = None
+        if self._config["sound_system"] == "FRUITJAM_DAC":
+            self._init_fruitjam_peripherals()
+
         # Status LED (optional)
         self._pixel = None
         neo_pin = _pin(self._config.get("neopixel_pin"))
@@ -53,6 +58,11 @@ class Machine:
             import neopixel
             self._pixel = neopixel.NeoPixel(neo_pin, 1, brightness=0.05, auto_write=True)
         self.set_status("init")
+
+        # Power switch (e.g., TPS22917 for LCD on FruitJam)
+        self._power_switch = None
+        if self._config.get("power_switch_pin"):
+            self._init_power_switch()
 
         # Storage manager — mounts SD card, creates shared SPI bus
         # Must be initialized BEFORE display (SD card needs SPI first)
@@ -63,11 +73,13 @@ class Machine:
             self.storage.sync_flash_to_sd()
 
         # Shared I2C bus (touch + codec may share it)
+        # Skip if Peripherals already owns the I2C bus
         self._i2c = None
-        scl = _pin(self._config.get("i2c_scl"))
-        sda = _pin(self._config.get("i2c_sda"))
-        if scl and sda:
-            self._i2c = busio.I2C(scl, sda, frequency=self._config.get("i2c_freq", 400_000))
+        if self._peripherals is None:
+            scl = _pin(self._config.get("i2c_scl"))
+            sda = _pin(self._config.get("i2c_sda"))
+            if scl and sda:
+                self._i2c = busio.I2C(scl, sda, frequency=self._config.get("i2c_freq", 400_000))
 
         # Display — pass shared SPI bus if SD card shares it
         spi = self.storage.spi if self._config.get("sd_shares_display_spi") else None
@@ -75,7 +87,8 @@ class Machine:
         print("Display ready")
 
         self.audio = AudioPlayer(self._config, i2c=self._i2c,
-                                 storage=self.storage)
+                                 storage=self.storage,
+                                 peripherals=self._peripherals)
         print("Audio ready")
 
         self.input = InputManager(self._config, self.display, i2c=self._i2c)
@@ -112,6 +125,37 @@ class Machine:
             import button_config
             self._legacy_sounds = button_config.button_sound
 
+    def _init_fruitjam_peripherals(self):
+        """Initialize Fruit Jam Peripherals (DAC, MCLK, PERIPH_RESET).
+
+        Peripherals claims D8/D9/D10 as buttons, but we need them for
+        the rotary encoder. Release the button pins after init so
+        InputManager can claim them for encoder use.
+        """
+        import displayio
+        displayio.release_displays()
+        from adafruit_fruitjam.peripherals import Peripherals
+        self._peripherals = Peripherals()
+        # Release D8/D9/D10 so encoder can use them
+        if hasattr(self._peripherals, '_buttons'):
+            for btn in self._peripherals._buttons:
+                btn.deinit()
+            self._peripherals._buttons = []
+            print("Fruit Jam Peripherals ready (encoder pins released)")
+
+    def _init_power_switch(self):
+        """Enable power switch (e.g., TPS22917 for LCD rail)."""
+        import digitalio
+        cfg = self._config
+        pin = _pin(cfg["power_switch_pin"])
+        self._power_switch = digitalio.DigitalInOut(pin)
+        self._power_switch.direction = digitalio.Direction.OUTPUT
+        active_low = cfg.get("power_switch_active_low", True)
+        self._power_switch.value = not active_low  # Enable: LOW if active_low
+        settle = cfg.get("power_switch_settle_ms", 500)
+        time.sleep(settle / 1000.0)
+        print("Power switch enabled (settle {}ms)".format(settle))
+
     def _build_grid(self):
         """Build the press grid from the current menu."""
         header = self._menu_stack.header
@@ -143,6 +187,11 @@ class Machine:
             print("Items:", len(self._menu_stack.items))
         self.set_status("ready")
 
+        # Show initial highlight if encoder navigation is active
+        self._has_encoder_nav = self._config.get("encoder_navigation", False)
+        if self._has_encoder_nav:
+            self.display.set_highlight(self.input.selected_index)
+
         while True:
             button = self.input.poll()
             if button is not None:
@@ -150,6 +199,9 @@ class Machine:
                 self._handle_press(button)
             else:
                 self.sleep.check()
+            # Update highlight position from encoder
+            if self._has_encoder_nav:
+                self.display.set_highlight(self.input.selected_index)
             time.sleep(0.01)
 
     def _handle_press(self, button_index):
