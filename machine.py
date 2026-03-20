@@ -82,6 +82,7 @@ class Machine:
         self.sleep = SleepManager(self._config)
         self.sleep.set_pixel(self._pixel)
         self.sleep.set_input(self.input)
+        self.sleep.set_display(self.display)
 
         # Menu system — try to load from .menu files, fall back to button_config
         self._menu_stack = None

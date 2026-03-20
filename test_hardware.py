@@ -670,21 +670,21 @@ def test_sleep(config):
         pixel[0] = (0, 0, 0)
         test("NeoPixel off", True)
 
-    # Turn off backlight
+    # Turn off backlight (hold pin low through sleep — do NOT deinit)
+    bl = None
     bl_pin = _pin(config.get("lcd_backlight"))
     if bl_pin:
         bl = digitalio.DigitalInOut(bl_pin)
         bl.switch_to_output(value=False)
-        bl.deinit()
         test("Backlight off", True)
 
-    # Disable amplifier
+    # Disable amplifier (hold pin through sleep)
+    amp = None
     amp_pin = _pin(config.get("amp_en_pin"))
     if amp_pin:
         amp = digitalio.DigitalInOut(amp_pin)
         active_low = config.get("amp_en_active_low", True)
         amp.switch_to_output(value=active_low)  # Disabled state
-        amp.deinit()
         test("Amplifier disabled", True)
 
     # Build wake alarms
@@ -730,9 +730,8 @@ def test_sleep(config):
         test("Wake (no alarm info)", True)
 
     # Restore backlight
-    if bl_pin:
-        bl = digitalio.DigitalInOut(bl_pin)
-        bl.switch_to_output(value=True)
+    if bl:
+        bl.value = True
         bl.deinit()
         test("Backlight restored", True)
 
@@ -742,10 +741,9 @@ def test_sleep(config):
         test("NeoPixel restored", True)
 
     # Restore amplifier
-    if amp_pin:
-        amp = digitalio.DigitalInOut(amp_pin)
+    if amp:
         active_low = config.get("amp_en_active_low", True)
-        amp.switch_to_output(value=not active_low)  # Enabled state
+        amp.value = not active_low  # Enabled state
         amp.deinit()
 
 

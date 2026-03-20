@@ -67,6 +67,7 @@ class DisplayManager:
             self._display_bus.send(0x21, b"")
 
         # Backlight
+        self._backlight = None
         bl_pin = _pin(config.get("lcd_backlight"))
         if bl_pin:
             import digitalio
@@ -105,6 +106,11 @@ class DisplayManager:
         col = min(screen_x // self._zone_width, self._cols - 1)
         row = min(screen_y // self._zone_height, self._rows - 1)
         return row * self._cols + col
+
+    def set_backlight(self, on):
+        """Turn the display backlight on or off."""
+        if self._backlight:
+            self._backlight.value = on
 
     @property
     def display(self):

@@ -43,6 +43,7 @@ class SleepManager:
         # References to hardware subsystems (set by Machine)
         self._pixel = None
         self._input = None
+        self._display = None
         self._backlight_pin_name = config.get("lcd_backlight")
         self._amp_en_pin_name = config.get("amp_en_pin")
         self._amp_active_low = config.get("amp_en_active_low", True)
@@ -64,6 +65,10 @@ class SleepManager:
     def set_input(self, input_manager):
         """Set InputManager reference so we can release pins for sleep."""
         self._input = input_manager
+
+    def set_display(self, display_manager):
+        """Set DisplayManager reference for backlight control."""
+        self._display = display_manager
 
     def activity(self):
         """Call this on any user interaction to reset the inactivity timer."""
@@ -145,28 +150,19 @@ class SleepManager:
 
     def _power_down(self):
         """Turn off peripherals to minimize power draw during sleep."""
-        import digitalio
-
         # Turn off NeoPixel
         if self._pixel:
             self._pixel[0] = (0, 0, 0)
 
-        # Turn off display backlight
-        bl_pin = _pin(self._backlight_pin_name)
-        if bl_pin:
-            try:
-                bl = digitalio.DigitalInOut(bl_pin)
-                bl.switch_to_output(value=False)
-                bl.deinit()
-            except ValueError:
-                # Pin already in use by DisplayManager — that's ok,
-                # the display manager's backlight reference still works
-                pass
+        # Turn off display backlight via DisplayManager
+        if self._display:
+            self._display.set_backlight(False)
 
         # Disable amplifier (save power)
         amp_pin = _pin(self._amp_en_pin_name)
         if amp_pin:
             try:
+                import digitalio
                 amp = digitalio.DigitalInOut(amp_pin)
                 amp.switch_to_output(value=self._amp_active_low)
                 amp.deinit()
@@ -180,22 +176,15 @@ class SleepManager:
 
     def _power_up(self):
         """Restore peripherals after light sleep wake."""
-        import digitalio
-
-        # Restore display backlight
-        bl_pin = _pin(self._backlight_pin_name)
-        if bl_pin:
-            try:
-                bl = digitalio.DigitalInOut(bl_pin)
-                bl.switch_to_output(value=True)
-                bl.deinit()
-            except ValueError:
-                pass
+        # Restore display backlight via DisplayManager
+        if self._display:
+            self._display.set_backlight(True)
 
         # Re-enable amplifier
         amp_pin = _pin(self._amp_en_pin_name)
         if amp_pin:
             try:
+                import digitalio
                 amp = digitalio.DigitalInOut(amp_pin)
                 amp.switch_to_output(value=not self._amp_active_low)
                 amp.deinit()
