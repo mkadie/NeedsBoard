@@ -8,10 +8,10 @@
 #
 #  +----------+----------+----------+----------+
 #  | Thirsty  | Hungry   |   More   | Bathroom |
-#  |    0     |    1     |    2     |    3     |
+#  |    1     |    2     |    3     |    4     |
 #  +----------+----------+----------+----------+
 #  |  Stinky  |   Yes    |    No    |  Please  |
-#  |    4     |    5     |    6     |    7     |
+#  |    5     |    6     |    7     |    8     |
 #  +----------+----------+----------+----------+
 #
 #  The WAKE button (boot button) plays "read.mp3"
@@ -22,7 +22,7 @@ name = Base Menu
 type = grid
 columns = 4
 rows = 2
-background = images/needs_small.bmp
+background = /needs_small.bmp
 
 # ----- Top Row -----
 
@@ -30,25 +30,25 @@ background = images/needs_small.bmp
 label = Thirsty
 image = images/thirsty.bmp
 sound = /button_sounds/thirsty.mp3
-position = 0
+position = 1
 
 [hungry]
 label = Hungry
 image = images/hungry.bmp
 sound = /button_sounds/hungry.mp3
-position = 1
+position = 2
 
 [more]
 label = More
 image = images/more.bmp
-sound = /button_sounds/more.mp3
-position = 2
+submenu = food.menu
+position = 3
 
 [bathroom]
 label = Bathroom
 image = images/bathroom.bmp
 sound = /button_sounds/bathroom.mp3
-position = 3
+position = 4
 
 # ----- Bottom Row -----
 
@@ -56,7 +56,7 @@ position = 3
 label = Stinky
 image = images/stinky.bmp
 sound = /button_sounds/stinky.mp3
-position = 4
+position = 5
 
 [yes]
 label = Yes
@@ -64,7 +64,7 @@ image = images/yes.bmp
 sound = /button_sounds/yes.mp3
 vibrate = short
 light = green
-position = 5
+position = 6
 
 [no]
 label = No
@@ -72,10 +72,10 @@ image = images/no.bmp
 sound = /button_sounds/no.mp3
 vibrate = short
 light = red
-position = 6
+position = 7
 
 [please]
 label = Please
 image = images/please.bmp
 sound = /button_sounds/please.mp3
-position = 7
+position = 8

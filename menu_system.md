@@ -138,25 +138,25 @@ background = base_board.bmp
 label = Thirsty
 image = images/thirsty.bmp
 sound = sounds/thirsty.mp3
-position = 0
+position = 1
 
 [hungry]
 label = Hungry
 image = images/hungry.bmp
 sound = sounds/hungry.mp3
-position = 1
+position = 2
 
 [more]
 label = More
 image = images/more.bmp
 sound = sounds/more.mp3
-position = 2
+position = 3
 
 [bathroom]
 label = Bathroom
 image = images/bathroom.bmp
 sound = sounds/bathroom.mp3
-position = 3
+position = 4
 
 # ----- Row 2 -----
 
@@ -165,40 +165,40 @@ label = Yes
 image = images/yes.bmp
 sound = sounds/yes.mp3
 vibrate = short
-position = 4
+position = 5
 
 [no]
 label = No
 image = images/no.bmp
 sound = sounds/no.mp3
 vibrate = short
-position = 5
+position = 6
 
 [feelings]
 label = Feelings
 image = images/feelings.bmp
 sound = sounds/how_do_you_feel.mp3
 submenu = feelings.menu
-position = 6
+position = 7
 
 [food]
 label = Food & Drink
 image = images/food.bmp
 submenu = food.menu
-position = 7
+position = 8
 ```
 
 **Position numbering** for a 4x2 grid:
 
 ```
 +--------+--------+--------+--------+
-|   0    |   1    |   2    |   3    |
+|   1    |   2    |   3    |   4    |
 +--------+--------+--------+--------+
-|   4    |   5    |   6    |   7    |
+|   5    |   6    |   7    |   8    |
 +--------+--------+--------+--------+
 ```
 
-Positions are numbered left-to-right, top-to-bottom, starting at 0.
+Positions are numbered left-to-right, top-to-bottom, starting at 1.
 
 ### List Menu (type = list)
 
@@ -417,6 +417,7 @@ text = I would like some milk please
 [spacer_3]
 label =
 position = 3
+# (position 3 = third slot in the grid)
 ```
 
 ---
@@ -495,21 +496,21 @@ label = I Want
 image = images/i_want.bmp
 sound = sounds/i_want.mp3
 submenu = want_what.menu
-position = 0
+position = 1
 
 [feel]
 label = I Feel
 image = images/i_feel.bmp
 sound = sounds/i_feel.mp3
 submenu = feelings.menu
-position = 1
+position = 2
 
 [go]
 label = Go
 image = images/go.bmp
 sound = sounds/go.mp3
 submenu = places.menu
-position = 2
+position = 3
 
 [help]
 label = Help
@@ -517,7 +518,7 @@ image = images/help.bmp
 sound = sounds/help_me.mp3
 vibrate = long
 light = red
-position = 3
+position = 4
 
 # Bottom row: quick responses
 [yes]
@@ -526,7 +527,7 @@ image = images/yes.bmp
 sound = sounds/yes.mp3
 vibrate = short
 light = green
-position = 4
+position = 5
 
 [no]
 label = No
@@ -534,20 +535,20 @@ image = images/no.bmp
 sound = sounds/no.mp3
 vibrate = short
 light = red
-position = 5
+position = 6
 
 [more]
 label = More
 image = images/more.bmp
 sound = sounds/more_please.mp3
-position = 6
+position = 7
 
 [all_done]
 label = All Done
 image = images/all_done.bmp
 sound = sounds/all_done.mp3
 light = blue
-position = 7
+position = 8
 ```
 
 ### want_what.menu
@@ -568,7 +569,7 @@ back = base.menu
 [back_button]
 label = ← Back
 image = images/back_arrow.bmp
-position = 0
+position = 1
 back =
 
 [drink]
@@ -576,26 +577,26 @@ label = Drink
 image = images/drink.bmp
 sound = sounds/i_want_a_drink.mp3
 submenu = drinks.menu
-position = 1
+position = 2
 
 [snack]
 label = Snack
 image = images/snack.bmp
 sound = sounds/i_want_a_snack.mp3
 submenu = snacks.menu
-position = 2
+position = 3
 
 [play]
 label = Play
 image = images/play.bmp
 sound = sounds/i_want_to_play.mp3
-position = 3
+position = 4
 
 [read]
 label = Read
 image = images/book.bmp
 sound = sounds/read_to_me.mp3
-position = 4
+position = 5
 
 [hug]
 label = Hug
@@ -603,19 +604,19 @@ image = images/hug.bmp
 sound = sounds/i_want_a_hug.mp3
 vibrate = short
 light = pink
-position = 5
+position = 6
 
 [music]
 label = Music
 image = images/music.bmp
 sound = sounds/i_want_music.mp3
-position = 6
+position = 7
 
 [outside]
 label = Go Outside
 image = images/outside.bmp
 sound = sounds/i_want_to_go_outside.mp3
-position = 7
+position = 8
 ```
 
 ### feelings.menu
@@ -853,7 +854,7 @@ Every other section defines a press item:
 | Key | Required | Values | Description |
 |-----|----------|--------|-------------|
 | `label` | Yes | text | Text shown on the button / in the list |
-| `position` | Grid only | number | Grid position (0 = top-left) |
+| `position` | Grid only | number | Grid position (1 = top-left) |
 | `image` | Encouraged | file path | Picture for this item |
 | `sound` | Optional | file path | MP3 to play when pressed |
 | `text` | Optional | text | Text to display on screen when pressed |

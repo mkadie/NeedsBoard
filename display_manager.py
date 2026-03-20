@@ -81,11 +81,20 @@ class DisplayManager:
 
     def _load_background(self, image_path):
         """Load and display a BMP background image."""
-        print("Loading background image...")
+        import gc
+        print("Loading background:", image_path)
+        # Clear existing content
+        while len(self._splash):
+            self._splash.pop()
+        gc.collect()
         odb = displayio.OnDiskBitmap(image_path)
         face = displayio.TileGrid(odb, pixel_shader=odb.pixel_shader)
         self._splash.append(face)
         print("Background loaded")
+
+    def set_background(self, image_path):
+        """Swap the background image (used when navigating between menus)."""
+        self._load_background(image_path)
 
     def get_button_from_screen(self, screen_x, screen_y):
         """Map screen coordinates to a button grid index.

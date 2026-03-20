@@ -88,6 +88,10 @@ def get_sorted_items(items, sort_by="alpha"):
 def get_grid_items(items, columns, rows):
     """Arrange items into a grid by position number.
 
+    Positions in .menu files are 1-based (1 = top-left) so that
+    teachers and parents see familiar numbering. Internally the
+    grid list is 0-based.
+
     Returns:
         List of length (columns * rows), with item dicts at their
         position index and None for empty slots.
@@ -96,8 +100,10 @@ def get_grid_items(items, columns, rows):
     grid = [None] * size
     for item in items:
         pos = item.get("position")
-        if pos is not None and 0 <= pos < size:
-            grid[pos] = item
+        if pos is not None:
+            idx = pos - 1  # Convert 1-based to 0-based
+            if 0 <= idx < size:
+                grid[idx] = item
     return grid
 
 

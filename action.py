@@ -45,17 +45,20 @@ class Action:
     execute(item_dict) for each press.
     """
 
-    def __init__(self, audio=None, display=None, pixel=None):
+    def __init__(self, audio=None, display=None, pixel=None,
+                 menus_dir="/menus"):
         """Set up action executor with hardware references.
 
         Args:
             audio: AudioPlayer instance (or None if no audio).
             display: DisplayManager instance (or None).
             pixel: NeoPixel object (or None if no status LED).
+            menus_dir: Base directory for resolving relative paths.
         """
         self._audio = audio
         self._display = display
         self._pixel = pixel
+        self._menus_dir = menus_dir
 
     def execute(self, item):
         """Execute all actions defined in a press item dict.
@@ -112,13 +115,19 @@ class Action:
 
         return None
 
+    def _resolve_path(self, path):
+        """Resolve a menu-relative path to absolute."""
+        if not path or path.startswith("/"):
+            return path
+        return self._menus_dir + "/" + path
+
     def _do_sound(self, item):
         """Play a sound file if specified."""
         sound_path = item.get("sound")
         if not sound_path or not self._audio:
             return
         try:
-            self._audio.play(sound_path)
+            self._audio.play(self._resolve_path(sound_path))
         except Exception as e:
             print("Action: sound error:", e)
 

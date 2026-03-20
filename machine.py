@@ -74,6 +74,7 @@ class Machine:
             audio=self.audio,
             display=self.display,
             pixel=self._pixel,
+            menus_dir=menus_dir,
         )
 
         # Menu system — try to load from .menu files, fall back to button_config
@@ -83,6 +84,7 @@ class Machine:
         try:
             self._menu_stack = MenuStack(menus_dir, start_menu)
             self._build_grid()
+            self._update_display()
             print("Menu loaded:", self._menu_stack.name)
         except Exception as e:
             print("Menu load failed ({}), falling back to button_config".format(e))
@@ -162,6 +164,7 @@ class Machine:
         if nav == "back":
             if self._menu_stack.back():
                 self._build_grid()
+                self._update_display()
                 print("Back to:", self._menu_stack.name)
             else:
                 print("Already at root menu")
@@ -170,9 +173,29 @@ class Machine:
             try:
                 self._menu_stack.navigate(menu_file)
                 self._build_grid()
+                self._update_display()
                 print("Navigated to:", self._menu_stack.name)
             except Exception as e:
                 print("Navigation error:", e)
+
+    def _resolve_path(self, path):
+        """Resolve a menu-relative path to an absolute device path.
+
+        Paths starting with / are already absolute.
+        Other paths are relative to the menus directory.
+        """
+        if not path or path.startswith("/"):
+            return path
+        return self._menus_dir + "/" + path
+
+    def _update_display(self):
+        """Update the display background for the current menu."""
+        bg = self._menu_stack.header.get("background")
+        if bg:
+            try:
+                self.display.set_background(self._resolve_path(bg))
+            except Exception as e:
+                print("Background load error:", e)
 
     def _play_legacy(self, button_index):
         """Legacy mode: play sound by index from button_config."""
