@@ -30,7 +30,7 @@ class InputManager:
         self._config = config
         self._display = display_manager
         self._debounce_time = config.get("debounce_time", 0.5)
-        self._touch_time = time.monotonic()
+        self._last_press_time = 0  # Global debounce for ALL inputs
         self._debug = True
 
         # Touch screen
@@ -126,31 +126,38 @@ class InputManager:
     def poll(self):
         """Check all input sources for a button press.
 
+        All inputs share a global debounce timer to prevent double-fires.
+
         Returns:
             Button index (int) if pressed, or None.
         """
-        # Wake button (checked every iteration, no debounce)
+        now = time.monotonic()
+        if now - self._last_press_time < self._debounce_time:
+            return None
+
+        # Wake button
         result = self._check_wake()
         if result is not None:
+            self._last_press_time = now
             return result
 
         # Encoder button
         result = self._check_encoder()
         if result is not None:
+            self._last_press_time = now
             return result
 
         # Hardware button decoder
         result = self._check_buttons()
         if result is not None:
+            self._last_press_time = now
             return result
 
-        # Touch screen (debounced)
-        now = time.monotonic()
-        if now - self._touch_time >= self._debounce_time:
-            result = self._check_touch()
-            if result is not None:
-                self._touch_time = time.monotonic()
-                return result
+        # Touch screen
+        result = self._check_touch()
+        if result is not None:
+            self._last_press_time = now
+            return result
 
         return None
 

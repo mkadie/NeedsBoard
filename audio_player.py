@@ -19,16 +19,18 @@ def _pin(name):
 class AudioPlayer:
     """Plays MP3 files through either an ES8311 codec or direct I2S."""
 
-    def __init__(self, config, i2c=None):
+    def __init__(self, config, i2c=None, storage=None):
         """Initialize audio hardware from config dict.
 
         Args:
             config: Hardware config dictionary.
             i2c: Shared I2C bus (required for ES8311 sound system).
+            storage: StorageManager for SD-first path resolution.
         """
         self._config = config
         self._codec = None
         self._amp_en = None
+        self._storage = storage
         self._current_rate = config["codec_sample_rate"]
         self._volume = config["volume"]
 
@@ -64,9 +66,15 @@ class AudioPlayer:
     def play(self, sound_file):
         """Play an MP3 file. Blocks until playback finishes.
 
+        Checks SD card first via StorageManager, falls back to flash.
+
         Args:
             sound_file: Path to the MP3 file.
         """
+        # Resolve path: SD card first, then flash
+        if self._storage:
+            sound_file = self._storage.resolve_path(sound_file)
+
         f = None
         try:
             f = open(sound_file, "rb")

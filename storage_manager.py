@@ -74,10 +74,28 @@ class StorageManager:
             self._sd_mounted = False
 
     def _scan_sd(self):
-        """Scan the SD card directory tree and build a path lookup set."""
+        """Scan relevant SD card directories and build a path lookup set.
+
+        Only scans content directories (menus, button_sounds) and root
+        content files — not the entire card (which may have hundreds of
+        unrelated files like CircuitPython libraries).
+        """
         self._sd_files.clear()
-        count = self._scan_dir("/sd")
-        print("Storage: {} files indexed on SD card".format(count))
+        count = 0
+        # Scan content directories (menus, sounds, button_sounds)
+        for d in ["/sd/menus", "/sd/button_sounds", "/sd/sounds"]:
+            count += self._scan_dir(d)
+        # Scan root-level content files (bmp, mp3, menu)
+        try:
+            for f in os.listdir("/sd"):
+                lower = f.lower()
+                if (lower.endswith(".bmp") or lower.endswith(".mp3")
+                        or lower.endswith(".wav") or lower.endswith(".menu")):
+                    self._sd_files.add("/sd/" + f)
+                    count += 1
+        except OSError:
+            pass
+        print("Storage: {} content files indexed on SD".format(count))
 
     def _scan_dir(self, path):
         """Recursively scan a directory, adding file paths to _sd_files."""

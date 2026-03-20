@@ -74,7 +74,8 @@ class Machine:
         self.display = DisplayManager(self._config, spi=spi)
         print("Display ready")
 
-        self.audio = AudioPlayer(self._config, i2c=self._i2c)
+        self.audio = AudioPlayer(self._config, i2c=self._i2c,
+                                 storage=self.storage)
         print("Audio ready")
 
         self.input = InputManager(self._config, self.display, i2c=self._i2c)
