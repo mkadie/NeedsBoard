@@ -85,7 +85,7 @@ VARIANTS = {
         "display_type": "ILI9341",
         "screen_width": 320,
         "screen_height": 240,
-        "display_rotation": 180,
+        "display_rotation": 0,
         "display_inverted": False,
         "background_image": "/needs_small.bmp",
         "lcd_cs": "GP3",
