@@ -12,6 +12,7 @@ import time
 import board
 import alarm
 import alarm.pin
+import supervisor
 
 
 def _pin(name):
@@ -51,6 +52,8 @@ class SleepManager:
             print("Sleep: enabled, timeout={}s, mode={}".format(
                 self._timeout, self._mode))
             print("Sleep: wake pins:", self._wake_pin_names)
+            if supervisor.runtime.usb_connected:
+                print("Sleep: USB connected — sleep suspended until unplugged")
         else:
             print("Sleep: disabled")
 
@@ -75,6 +78,12 @@ class SleepManager:
             For deep sleep, this never returns — code.py restarts.
         """
         if not self._enabled:
+            return False
+
+        # Don't sleep while connected to USB — light sleep causes
+        # USB disconnect which triggers auto-reload (looks like a reboot).
+        # On battery (the target use case) this check is False.
+        if supervisor.runtime.usb_connected:
             return False
 
         elapsed = time.monotonic() - self._last_activity
