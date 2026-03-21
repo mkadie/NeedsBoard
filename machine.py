@@ -47,7 +47,6 @@ class Machine:
             self._init_full_power()
 
         # Emergency push fast path: check button BEFORE heavy init
-        self._emergency_playing = False
         emergency_held = self._check_emergency_pin()
 
         # Fruit Jam Peripherals (must init before anything else on FruitJam)
@@ -55,11 +54,11 @@ class Machine:
         if self._config["sound_system"] == "FRUITJAM_DAC":
             self._init_fruitjam_peripherals()
 
-        # If emergency button held, start playing sound NOW before display/menus
+        # If emergency button held, play sound to completion before anything else
         if emergency_held:
-            self._start_emergency_sound()
+            self._play_emergency_sound()
 
-        # Deferred imports — these run while emergency sound plays
+        # Deferred imports — after emergency sound finishes (if any)
         import busio
         from storage_manager import StorageManager
         from display_manager import DisplayManager
@@ -169,8 +168,11 @@ class Machine:
             print("EMERGENCY: button held at boot!")
         return pressed
 
-    def _start_emergency_sound(self):
-        """Play emergency sound ASAP using minimal audio init."""
+    def _play_emergency_sound(self):
+        """Play emergency sound to completion before any other init.
+
+        Blocks until playback finishes so MP3 decoding gets full CPU.
+        """
         cfg = self._config
         sound_file = cfg.get("emergency_push_sound")
         if not sound_file or not self._peripherals:
@@ -187,9 +189,11 @@ class Machine:
             f = open(sound_file, "rb")
             mp3 = audiomp3.MP3Decoder(f)
             self._peripherals.audio.play(mp3)
-            self._emergency_playing = True
-            self._emergency_file = f
             print("EMERGENCY: playing", sound_file)
+            while self._peripherals.audio.playing:
+                time.sleep(0.01)
+            f.close()
+            print("EMERGENCY: done")
         except Exception as e:
             print("EMERGENCY: sound error:", e)
 
@@ -241,15 +245,6 @@ class Machine:
     def run(self):
         """Main application loop. Polls inputs and executes actions."""
         cfg = self._config
-
-        # Wait for emergency sound to finish if it was triggered at boot
-        if self._emergency_playing:
-            print("EMERGENCY: waiting for sound to finish...")
-            while self._peripherals.audio.playing:
-                time.sleep(0.01)
-            self._emergency_file.close()
-            self._emergency_playing = False
-            print("EMERGENCY: done")
 
         print("AAC Device ready")
         print("Grid:", cfg["button_cols"], "x", cfg["button_rows"])

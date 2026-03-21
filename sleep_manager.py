@@ -218,15 +218,22 @@ class SleepManager:
             self._full_power.value = active_low  # Disable: HIGH if active_low
             print("Sleep: FULL_POWER OFF")
 
-        # Poll for wake — check encoder rotation and emergency/button pins
+        # Poll for wake — check button press and encoder rotation
         print("Sleep: idle, polling for wake...")
-        emergency_pin = None
-        emergency_pin_name = self._config.get("emergency_push_pin")
-        if emergency_pin_name and self._config.get("emergency_push_enabled"):
-            pin = _pin(emergency_pin_name)
-            emergency_pin = digitalio.DigitalInOut(pin)
-            emergency_pin.direction = digitalio.Direction.INPUT
-            emergency_pin.pull = digitalio.Pull.UP
+        wake_btn = None
+        wake_pin_name = self._config.get("emergency_push_pin",
+                                         self._config.get("encoder_button_pin"))
+        if wake_pin_name:
+            # Release encoder button so we can claim the pin for wake polling
+            if self._input and hasattr(self._input, '_encoder_button'):
+                eb = self._input._encoder_button
+                if eb:
+                    eb.deinit()
+                    self._input._encoder_button = None
+            pin = _pin(wake_pin_name)
+            wake_btn = digitalio.DigitalInOut(pin)
+            wake_btn.direction = digitalio.Direction.INPUT
+            wake_btn.pull = digitalio.Pull.UP
 
         encoder = None
         last_pos = 0
@@ -236,8 +243,8 @@ class SleepManager:
                 last_pos = encoder.position
 
         while True:
-            # Check emergency/button pin (active low)
-            if emergency_pin and not emergency_pin.value:
+            # Check button press (active low)
+            if wake_btn and not wake_btn.value:
                 print("Sleep: button wake!")
                 break
             # Check encoder rotation
@@ -249,8 +256,8 @@ class SleepManager:
                     break
             time.sleep(0.1)
 
-        if emergency_pin:
-            emergency_pin.deinit()
+        if wake_btn:
+            wake_btn.deinit()
 
         # Wake: restore everything
         self._wake_from_idle()
