@@ -45,11 +45,23 @@ class InputManager:
         if config.get("max_buttons", 0) > 0:
             self._init_buttons(config)
 
+        # Direct GPIO buttons (individual pins, no decoder)
+        self._direct_buttons = []
+        self._direct_last = []
+        if config.get("direct_button_pins"):
+            self._init_direct_buttons(config)
+
         # Rotary encoder
         self._encoder = None
         self._encoder_button = None
         self._encoder_button_index = config.get("encoder_button_index", 8)
         self._last_encoder_button = True
+        self._last_encoder_pos = 0
+        # Encoder navigation: rotate to select, press to activate
+        self._encoder_nav = config.get("encoder_navigation", False)
+        self._selected_index = 0
+        max_grid = config.get("button_cols", 4) * config.get("button_rows", 2)
+        self._max_index = max_grid
         if config.get("rotary_encoder", False):
             self._init_encoder(config)
 
@@ -109,6 +121,18 @@ class InputManager:
             self._button_latch.direction = digitalio.Direction.OUTPUT
             self._button_latch.value = False
 
+    def _init_direct_buttons(self, config):
+        """Initialize individual GPIO buttons (active low with pull-up)."""
+        active_low = config.get("direct_buttons_active_low", True)
+        for pin_name in config["direct_button_pins"]:
+            pin = digitalio.DigitalInOut(_pin(pin_name))
+            pin.direction = digitalio.Direction.INPUT
+            pin.pull = digitalio.Pull.UP if active_low else digitalio.Pull.DOWN
+            self._direct_buttons.append(pin)
+            self._direct_last.append(pin.value)
+        self._direct_active_low = active_low
+        print("Direct buttons ready:", len(self._direct_buttons), "pins")
+
     def _init_encoder(self, config):
         """Initialize rotary encoder and its push button."""
         import rotaryio
@@ -116,12 +140,15 @@ class InputManager:
             _pin(config["encoder_pin_a"]),
             _pin(config["encoder_pin_b"]),
         )
+        self._last_encoder_pos = self._encoder.position
         btn_pin = _pin(config.get("encoder_button_pin"))
         if btn_pin:
             self._encoder_button = digitalio.DigitalInOut(btn_pin)
             self._encoder_button.direction = digitalio.Direction.INPUT
             self._encoder_button.pull = digitalio.Pull.UP
             self._last_encoder_button = self._encoder_button.value
+        print("Encoder ready: nav={} pos={} max={}".format(
+            self._encoder_nav, self._last_encoder_pos, self._max_index))
 
     def poll(self):
         """Check all input sources for a button press.
@@ -149,6 +176,12 @@ class InputManager:
 
         # Hardware button decoder
         result = self._check_buttons()
+        if result is not None:
+            self._last_press_time = now
+            return result
+
+        # Direct GPIO buttons
+        result = self._check_direct_buttons()
         if result is not None:
             self._last_press_time = now
             return result
@@ -221,17 +254,64 @@ class InputManager:
 
         return button_number
 
-    def _check_encoder(self):
-        """Poll rotary encoder button. Returns button index or None."""
-        if self._encoder_button is None:
+    def _check_direct_buttons(self):
+        """Poll direct GPIO buttons. Returns button index or None."""
+        if not self._direct_buttons:
             return None
 
+        for i, pin in enumerate(self._direct_buttons):
+            current = pin.value
+            if current != self._direct_last[i]:
+                self._direct_last[i] = current
+                # Detect press: active low means pressed=False
+                pressed = not current if self._direct_active_low else current
+                if pressed:
+                    if self._debug:
+                        print("Direct button", i, "pressed")
+                    return i
+        return None
+
+    def _check_encoder(self):
+        """Poll rotary encoder rotation and button.
+
+        In navigation mode: rotation moves selection, button activates.
+        In legacy mode: button returns fixed index.
+        """
+        if self._encoder is None:
+            return None
+
+        # Check rotation
+        if self._encoder_nav:
+            pos = self._encoder.position
+            delta = pos - self._last_encoder_pos
+            if delta != 0:
+                self._last_encoder_pos = pos
+                old = self._selected_index
+                # Negate: clockwise = move right/down
+                self._selected_index = (self._selected_index - delta) % self._max_index
+                if self._debug:
+                    print("Encoder: select", self._selected_index,
+                          "(was", old, "delta", delta, ")")
+                return None  # Rotation doesn't trigger a press
+
+        # Check button press
+        if self._encoder_button is None:
+            return None
         current = self._encoder_button.value
         if current != self._last_encoder_button:
             self._last_encoder_button = current
             if not current:  # Active low
+                if self._encoder_nav:
+                    if self._debug:
+                        print("Encoder: activate", self._selected_index)
+                    return self._selected_index
                 return self._encoder_button_index
         return None
+
+    @property
+    def selected_index(self):
+        """Current encoder-selected grid index."""
+        return self._selected_index
 
     def _check_wake(self):
         """Poll wake button. Returns button index or None."""

@@ -56,16 +56,33 @@ class DisplayManager:
         reset = _pin(config.get("lcd_reset"))
         if reset:
             fw_kwargs["reset"] = reset
+        baudrate = config.get("spi_baudrate")
+        if baudrate:
+            fw_kwargs["baudrate"] = baudrate
         self._display_bus = fourwire.FourWire(self._spi, **fw_kwargs)
 
-        # ILI9341 display
-        import adafruit_ili9341
-        self._display = adafruit_ili9341.ILI9341(
-            self._display_bus,
-            width=self._width,
-            height=self._height,
-            rotation=config["display_rotation"],
-        )
+        # Display driver — select by type
+        display_type = config.get("display_type", "ILI9341")
+
+        if display_type == "ST7735R":
+            from adafruit_st7735r import ST7735R
+            self._display = ST7735R(
+                self._display_bus,
+                width=self._width,
+                height=self._height,
+                colstart=config.get("st7735_colstart", 0),
+                rowstart=config.get("st7735_rowstart", 0),
+                rotation=config["display_rotation"],
+                bgr=config.get("st7735_bgr", False),
+            )
+        else:
+            import adafruit_ili9341
+            self._display = adafruit_ili9341.ILI9341(
+                self._display_bus,
+                width=self._width,
+                height=self._height,
+                rotation=config["display_rotation"],
+            )
 
         # Fix color inversion for IPS panels
         if config.get("display_inverted", False):
@@ -80,10 +97,19 @@ class DisplayManager:
             self._backlight.direction = digitalio.Direction.OUTPUT
             self._backlight.value = True
 
-        # Display group and background image
+        # Display group — background loaded later by menu system or fallback
         self._splash = displayio.Group()
         self._display.root_group = self._splash
-        self._load_background(config["background_image"])
+        bg = config.get("background_image")
+        if bg:
+            try:
+                self._load_background(bg)
+            except Exception as e:
+                print("Initial background skipped:", e)
+
+        # Selection highlight overlay
+        self._highlight = None
+        self._highlight_index = -1
 
     def _load_background(self, image_path):
         """Load and display a BMP background image."""
@@ -96,11 +122,63 @@ class DisplayManager:
         odb = displayio.OnDiskBitmap(image_path)
         face = displayio.TileGrid(odb, pixel_shader=odb.pixel_shader)
         self._splash.append(face)
+        # Re-add highlight overlay if it existed
+        if self._highlight is not None:
+            self._splash.append(self._highlight)
         print("Background loaded")
 
     def set_background(self, image_path):
         """Swap the background image (used when navigating between menus)."""
         self._load_background(image_path)
+
+    def _create_highlight(self):
+        """Create a border-only highlight rectangle for cell selection."""
+        w = self._zone_width
+        h = self._zone_height
+        border = max(2, min(w, h) // 16)
+
+        bmp = displayio.Bitmap(w, h, 2)
+        pal = displayio.Palette(2)
+        pal[0] = 0x000000
+        pal.make_transparent(0)
+        pal[1] = 0xFFFF00  # Yellow highlight
+
+        # Draw border only
+        for x in range(w):
+            for b in range(border):
+                bmp[x, b] = 1
+                bmp[x, h - 1 - b] = 1
+        for y in range(h):
+            for b in range(border):
+                bmp[b, y] = 1
+                bmp[w - 1 - b, y] = 1
+
+        self._highlight = displayio.TileGrid(bmp, pixel_shader=pal, x=0, y=0)
+        self._splash.append(self._highlight)
+
+    def set_highlight(self, index):
+        """Move the selection highlight to a grid cell by index.
+
+        Args:
+            index: Grid cell index (0-based), or -1 to hide.
+        """
+        if index == self._highlight_index:
+            return
+
+        if self._highlight is None:
+            self._create_highlight()
+
+        self._highlight_index = index
+
+        if index < 0:
+            self._highlight.hidden = True
+            return
+
+        col = index % self._cols
+        row = index // self._cols
+        self._highlight.x = col * self._zone_width
+        self._highlight.y = row * self._zone_height
+        self._highlight.hidden = False
 
     def get_button_from_screen(self, screen_x, screen_y):
         """Map screen coordinates to a button grid index.

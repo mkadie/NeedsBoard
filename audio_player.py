@@ -1,11 +1,10 @@
 """Audio playback abstraction for AAC device.
 
-Supports ES8311 codec and direct I2S output.
+Supports ES8311 codec, direct I2S output, and Fruit Jam TLV320DAC3100.
 """
 
 import time
 import audiomp3
-import audiobusio
 import board
 
 
@@ -17,29 +16,55 @@ def _pin(name):
 
 
 class AudioPlayer:
-    """Plays MP3 files through either an ES8311 codec or direct I2S."""
+    """Plays MP3 files through ES8311, direct I2S, or Fruit Jam DAC."""
 
-    def __init__(self, config, i2c=None, storage=None):
+    def __init__(self, config, i2c=None, storage=None, peripherals=None):
         """Initialize audio hardware from config dict.
 
         Args:
             config: Hardware config dictionary.
             i2c: Shared I2C bus (required for ES8311 sound system).
             storage: StorageManager for SD-first path resolution.
+            peripherals: Fruit Jam Peripherals object (for FRUITJAM_DAC).
         """
         self._config = config
         self._codec = None
         self._amp_en = None
         self._storage = storage
+        self._peripherals = peripherals
         self._current_rate = config["codec_sample_rate"]
         self._volume = config["volume"]
+        self._sound_system = config["sound_system"]
+
+        if self._sound_system == "FRUITJAM_DAC":
+            self._init_fruitjam_dac(config, peripherals)
+        else:
+            self._init_i2s(config, i2c)
+
+    def _init_fruitjam_dac(self, config, peripherals):
+        """Initialize Fruit Jam TLV320DAC3100 audio via Peripherals."""
+        if peripherals is None:
+            raise ValueError("FRUITJAM_DAC requires Peripherals object")
+
+        peripherals.audio_output = "speaker"
+        peripherals.dac.dac_volume = config.get("dac_volume", -10)
+        peripherals.dac.speaker_volume = config.get("speaker_volume", 0)
+        peripherals.dac.speaker_gain = config.get("speaker_gain", 24)
+        self._audio = peripherals.audio
+        print("Fruit Jam DAC ready (dac={} spk={} gain={})".format(
+            config.get("dac_volume", -10),
+            config.get("speaker_volume", 0),
+            config.get("speaker_gain", 24)))
+
+    def _init_i2s(self, config, i2c):
+        """Initialize ES8311 codec or direct I2S output."""
+        import audiobusio
 
         # Amplifier enable pin
         if config.get("amp_en_pin"):
             import digitalio
             self._amp_en = digitalio.DigitalInOut(_pin(config["amp_en_pin"]))
             self._amp_en.direction = digitalio.Direction.OUTPUT
-            # Enable amplifier
             self._amp_en.value = not config.get("amp_en_active_low", True)
 
         # ES8311 codec initialization
@@ -75,10 +100,12 @@ class AudioPlayer:
         if self._storage:
             sound_file = self._storage.resolve_path(sound_file)
 
+        print("Audio: playing", sound_file)
         f = None
         try:
             f = open(sound_file, "rb")
             mp3 = audiomp3.MP3Decoder(f)
+            print("Audio: decoded, rate=", mp3.sample_rate)
 
             # Switch codec sample rate if needed
             if self._codec:
@@ -94,6 +121,9 @@ class AudioPlayer:
             self._audio.play(mp3)
             while self._audio.playing:
                 time.sleep(0.01)
+            print("Audio: done")
+        except Exception as e:
+            print("Audio: ERROR:", e)
         finally:
             if f:
                 f.close()

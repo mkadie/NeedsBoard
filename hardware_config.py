@@ -163,7 +163,112 @@ VARIANTS = {
         "sleep_mode": "light",
         "sleep_wake_pins": [],
     },
+
+    "FRUITJAM_V2": {
+        "name": "FRUITJAM_V2",
+
+        # Display — ST7735S 1.77" 160x128 (landscape via rotation=90)
+        "display_type": "ST7735R",
+        "screen_width": 160,
+        "screen_height": 128,
+        "display_rotation": 90,
+        "display_inverted": False,
+        "background_image": None,  # Menu system provides background
+        "lcd_cs": "A3",
+        "lcd_dc": "A2",
+        "lcd_sclk": "SCK",
+        "lcd_mosi": "MOSI",
+        "lcd_miso": "MISO",
+        "lcd_backlight": None,  # Backlight on 3V3_SWITCHED rail
+        "lcd_reset": "A1",
+        # ST7735R-specific settings
+        "st7735_colstart": 2,
+        "st7735_rowstart": 1,
+        "st7735_bgr": True,
+        "spi_baudrate": 24_000_000,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "dac_volume": -10,       # dB
+        "speaker_volume": 0,     # dB
+        "speaker_gain": 24,      # dB
+        # I2S pins not used directly — Peripherals handles them
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # FULL_POWER — gates 3V3_SWITCHED rail (LCD VCC, IOVCC, backlight)
+        # Active low: LOW = power on, HIGH = power off
+        "full_power_pin": "A4",
+        "full_power_active_low": True,
+        "full_power_settle_ms": 100,
+
+        # Peripherals reset — must be HIGH for DAC operation
+        "periph_reset_pin": "PERIPH_RESET",
+
+        # SD Card — none on current daughterboard
+        "sd_card": False,
+        "sd_cs": None,
+        "sd_sclk": None,
+        "sd_mosi": None,
+        "sd_miso": None,
+        "sd_shares_display_spi": False,
+
+        # I2C (for Peripherals / DAC)
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        # Touch screen — none
+        "touch_screen": False,
+
+        # Physical buttons — not connected on current daughterboard
+        "max_buttons": 0,
+        # "direct_button_pins": ["A4", "A5", "D6", "D7"],  # Enable when tested
+        "direct_buttons_active_low": True,
+
+        # Rotary encoder — navigation mode: rotate to select, press to activate
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "D8",
+        "encoder_pin_b": "D9",
+        "encoder_button_pin": "D10",
+        "encoder_button_index": 0,
+
+        # Wake / extra button
+        "wake_button_pin": None,
+        "wake_button_index": 5,
+
+        # Status LED — NeoPixel not connected via 32-pin socket
+        "neopixel_pin": None,
+
+        # Button grid layout — 3x2 for 160x128 display
+        "button_cols": 3,
+        "button_rows": 2,
+        "debounce_time": 0.5,
+        "start_menu": "base_fruitjam.menu",
+
+        # Emergency push — fast-path audio on wake
+        # When enabled, checks emergency_pin at boot. If held, plays
+        # the sound immediately after DAC init, before display/menus.
+        # emergency_push_pin defaults to encoder_button_pin if not set.
+        "emergency_push_enabled": True,
+        "emergency_push_sound": "/button_sounds/emergency.mp3",
+
+        # Sleep — software idle mode (no alarm module on RP2350B)
+        # Powers down display, DAC, and ESP32 via PERIPH_RESET
+        # Polls encoder for wake
+        "sleep_enabled": True,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+    },
 }
 
 # Change this single line to switch machine variant
-DEFAULT_VARIANT = "CYD_PLUS"
+DEFAULT_VARIANT = "FRUITJAM_V2"
