@@ -232,7 +232,9 @@ class DisplayManager:
             self._text_lines[1].text = text
             return
         if self._text_area is None and not self._text_mode:
-            # Create overlay for color screens on first use
+            # Create overlay for color screens — only if hint text enabled
+            if not self._config.get("display_hint_text", True):
+                return
             import terminalio
             from adafruit_display_text import label
             self._text_area = label.Label(

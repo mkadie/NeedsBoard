@@ -56,6 +56,7 @@ def apply_config(hw_config, user_config):
         "debounce_time",
         "encoder_direction_flip",
         "show_border",
+        "display_hint_text",
         "start_menu",
         "emergency_push_enabled",
         "emergency_push_sound",

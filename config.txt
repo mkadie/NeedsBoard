@@ -30,6 +30,10 @@ encoder_direction_flip = true
 # When false, displays 3 lines: previous, current, next item
 show_border = false
 
+# Show hint text overlay on graphic displays (true/false)
+# Displays text_description at the bottom of the screen
+display_hint_text = true
+
 # --- Menu ---
 # Starting menu file (in /menus directory)
 start_menu = base_fruitjam.menu
