@@ -24,7 +24,12 @@ volume = 80
 debounce_time = 0.5
 
 # Flip encoder scroll direction (true/false)
-encoder_direction_flip = true
+encoder_direction_flip = false
+
+# Play sound on button release instead of press (true/false)
+# Helps prevent accidental activations. Emergency hold still
+# triggers after timeout regardless of this setting.
+play_on_release = false
 
 # Show border around text on OLED (true/false)
 # When false, displays 3 lines: previous, current, next item
@@ -45,3 +50,9 @@ emergency_push_enabled = true
 
 # Sound file to play on emergency push
 emergency_push_sound = /button_sounds/emergency.mp3
+
+# Play emergency sound when button held for N seconds (true/false)
+emergency_hold_enabled = true
+
+# Seconds to hold before triggering emergency sound
+emergency_hold_seconds = 3

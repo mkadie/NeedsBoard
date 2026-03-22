@@ -257,6 +257,8 @@ VARIANTS = {
         "volume": 80,
         "emergency_push_enabled": True,
         "emergency_push_sound": "/button_sounds/emergency.mp3",
+        "emergency_hold_enabled": True,
+        "emergency_hold_seconds": 3,
         "sleep_enabled": True,
         "sleep_timeout": 120,
 
@@ -334,6 +336,8 @@ VARIANTS = {
         "volume": 80,
         "emergency_push_enabled": True,
         "emergency_push_sound": "/button_sounds/emergency.mp3",
+        "emergency_hold_enabled": True,
+        "emergency_hold_seconds": 3,
         "sleep_enabled": True,
         "sleep_timeout": 120,
 

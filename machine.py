@@ -295,6 +295,10 @@ class Machine:
         # Show initial highlight if encoder navigation is active
         self._has_encoder_nav = self._config.get("encoder_navigation", False)
         self._last_shown_index = -1
+        self._emergency_hold_enabled = self._config.get("emergency_hold_enabled", True)
+        self._emergency_hold_time = self._config.get("emergency_hold_seconds", 3)
+        self._hold_start = 0
+        self._hold_triggered = False
         if self._has_encoder_nav:
             self.display.set_highlight(self.input.selected_index)
             self._update_text_for_index(self.input.selected_index)
@@ -306,12 +310,39 @@ class Machine:
                 self._handle_press(button)
             else:
                 self.sleep.check()
+            # Check for emergency long-press
+            if self._emergency_hold_enabled:
+                self._check_emergency_hold()
             # Update highlight and text for encoder navigation
             if self._has_encoder_nav:
                 idx = self.input.selected_index
                 self.display.set_highlight(idx)
                 self._update_text_for_index(idx)
             time.sleep(0.01)
+
+    def _check_emergency_hold(self):
+        """Check if encoder button is held for emergency_hold_seconds.
+
+        Plays the emergency sound if held long enough. Resets when released.
+        """
+        held = self.input.encoder_button_held
+        if held:
+            if self._hold_start == 0:
+                self._hold_start = time.monotonic()
+            elif not self._hold_triggered:
+                elapsed = time.monotonic() - self._hold_start
+                if elapsed >= self._emergency_hold_time:
+                    self._hold_triggered = True
+                    print("EMERGENCY: hold triggered ({:.0f}s)".format(elapsed))
+                    sound = self._config.get("emergency_push_sound")
+                    if sound:
+                        self.display.set_text("EMERGENCY")
+                        self.set_status("playing")
+                        self.audio.play(sound)
+                        self.set_status("ready")
+        else:
+            self._hold_start = 0
+            self._hold_triggered = False
 
     def _get_item_text(self, index):
         """Get text_description for a grid item by index, with wrapping."""

@@ -55,11 +55,14 @@ def apply_config(hw_config, user_config):
         "volume",
         "debounce_time",
         "encoder_direction_flip",
+        "play_on_release",
         "show_border",
         "display_hint_text",
         "start_menu",
         "emergency_push_enabled",
         "emergency_push_sound",
+        "emergency_hold_enabled",
+        "emergency_hold_seconds",
     }
 
     for key, val in user_config.items():

@@ -60,6 +60,7 @@ class InputManager:
         # Encoder navigation: rotate to select, press to activate
         self._encoder_nav = config.get("encoder_navigation", False)
         self._encoder_flip = -1 if config.get("encoder_direction_flip", False) else 1
+        self._play_on_release = config.get("play_on_release", False)
         self._selected_index = 0
         max_grid = config.get("button_cols", 4) * config.get("button_rows", 2)
         self._max_index = max_grid
@@ -295,13 +296,18 @@ class InputManager:
                           "(was", old, "delta", delta, ")")
                 return None  # Rotation doesn't trigger a press
 
-        # Check button press
+        # Check button press or release
         if self._encoder_button is None:
             return None
         current = self._encoder_button.value
         if current != self._last_encoder_button:
             self._last_encoder_button = current
-            if not current:  # Active low
+            # Active low: not current = pressed, current = released
+            if self._play_on_release:
+                trigger = current  # Trigger on release (rising edge)
+            else:
+                trigger = not current  # Trigger on press (falling edge)
+            if trigger:
                 if self._encoder_nav:
                     if self._debug:
                         print("Encoder: activate", self._selected_index)
@@ -313,6 +319,13 @@ class InputManager:
     def selected_index(self):
         """Current encoder-selected grid index."""
         return self._selected_index
+
+    @property
+    def encoder_button_held(self):
+        """True if the encoder button is currently pressed (active low)."""
+        if self._encoder_button is None:
+            return False
+        return not self._encoder_button.value
 
     def _check_wake(self):
         """Poll wake button. Returns button index or None."""
