@@ -54,17 +54,17 @@ class Machine:
         if self._config.get("full_power_pin"):
             self._init_full_power()
 
-        # Emergency push fast path: check button BEFORE heavy init
+        # Emergency push fast path: minimal DAC init, skip Peripherals
         emergency_held = self._check_emergency_pin()
+        self._emergency_audio = None  # Holds I2S if emergency played
 
-        # Fruit Jam Peripherals (must init before anything else on FruitJam)
+        if emergency_held and self._config["sound_system"] == "FRUITJAM_DAC":
+            self._play_emergency_sound()
+
+        # Fruit Jam Peripherals (full init for normal operation)
         self._peripherals = None
         if self._config["sound_system"] == "FRUITJAM_DAC":
             self._init_fruitjam_peripherals()
-
-        # If emergency button held, play sound to completion before anything else
-        if emergency_held:
-            self._play_emergency_sound()
 
         # Deferred imports — after emergency sound finishes (if any)
         import busio
@@ -177,31 +177,56 @@ class Machine:
         return pressed
 
     def _play_emergency_sound(self):
-        """Play emergency sound to completion before any other init.
+        """Play emergency sound via minimal direct DAC init (~0.2s).
 
-        Blocks until playback finishes so MP3 decoding gets full CPU.
+        Bypasses the full Peripherals import (1.3s) by directly
+        configuring MCLK, TLV320 DAC, and I2S. Blocks until done.
         """
         cfg = self._config
         sound_file = cfg.get("emergency_push_sound")
-        if not sound_file or not self._peripherals:
+        if not sound_file:
             return
 
         try:
+            import pwmio
+            import busio
+            import audiobusio
             import audiomp3
-            # Configure DAC with minimal setup
-            self._peripherals.audio_output = "speaker"
-            self._peripherals.dac.dac_volume = cfg.get("dac_volume", -10)
-            self._peripherals.dac.speaker_volume = cfg.get("speaker_volume", 0)
-            self._peripherals.dac.speaker_gain = cfg.get("speaker_gain", 24)
+            import adafruit_tlv320
 
+            # MCLK — 15 MHz master clock for DAC PLL
+            mclk = pwmio.PWMOut(board.I2S_MCLK,
+                                frequency=15_000_000, duty_cycle=2**15)
+
+            # DAC — minimal I2C config
+            i2c = board.I2C()
+            dac = adafruit_tlv320.TLV320DAC3100(i2c)
+            sample_rate = cfg.get("codec_sample_rate", 22050)
+            dac.configure_clocks(sample_rate=sample_rate,
+                                 bit_depth=16, mclk_freq=15_000_000)
+            dac.speaker_output = True
+            dac.dac_volume = cfg.get("dac_volume", -10)
+            dac.speaker_volume = cfg.get("speaker_volume", 0)
+            dac.speaker_gain = cfg.get("speaker_gain", 24)
+
+            # I2S output
+            audio = audiobusio.I2SOut(board.I2S_BCLK,
+                                      board.I2S_WS, board.I2S_DIN)
+
+            # Play
             f = open(sound_file, "rb")
             mp3 = audiomp3.MP3Decoder(f)
-            self._peripherals.audio.play(mp3)
+            audio.play(mp3)
             print("EMERGENCY: playing", sound_file)
-            while self._peripherals.audio.playing:
+            while audio.playing:
                 time.sleep(0.01)
             f.close()
             print("EMERGENCY: done")
+
+            # Clean up so Peripherals can claim these pins
+            audio.deinit()
+            mclk.deinit()
+            i2c.deinit()
         except Exception as e:
             print("EMERGENCY: sound error:", e)
 
