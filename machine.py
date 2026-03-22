@@ -7,6 +7,7 @@ loads the menu system, and runs the main application loop.
 import time
 import board
 from hardware_config import VARIANTS, DEFAULT_VARIANT
+from config_reader import load_config, apply_config
 
 
 def _pin(name):
@@ -34,8 +35,15 @@ class Machine:
         if variant_name not in VARIANTS:
             raise ValueError("Unknown variant: " + variant_name)
 
-        self._config = VARIANTS[variant_name]
+        self._config = dict(VARIANTS[variant_name])  # Copy so overlay is safe
         self._menus_dir = menus_dir
+
+        # Load user config and overlay onto hardware defaults
+        user_config = load_config("/config.txt")
+        if user_config:
+            apply_config(self._config, user_config)
+            print("User config loaded ({} settings)".format(len(user_config)))
+
         if start_menu is None:
             start_menu = self._config.get("start_menu", "base.menu")
         self._start_menu = start_menu

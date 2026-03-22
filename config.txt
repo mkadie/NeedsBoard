@@ -1,0 +1,36 @@
+# ===================================================
+#  AAC Device Configuration
+#
+#  User-configurable settings. Edit this file to
+#  customize behavior without changing hardware config.
+#
+#  Lines starting with # are comments.
+#  Format: key = value
+# ===================================================
+
+# --- Sleep / Power Saving ---
+# Enable auto-sleep after inactivity (true/false)
+sleep_enabled = true
+
+# Seconds of inactivity before sleeping
+sleep_timeout = 120
+
+# --- Audio ---
+# Volume level (0-100)
+volume = 80
+
+# --- Input ---
+# Debounce time in seconds (prevents double-presses)
+debounce_time = 0.5
+
+# --- Menu ---
+# Starting menu file (in /menus directory)
+start_menu = base_fruitjam.menu
+
+# --- Emergency Push ---
+# When enabled, holding the wake button during boot
+# plays an emergency sound immediately.
+emergency_push_enabled = true
+
+# Sound file to play on emergency push
+emergency_push_sound = /button_sounds/emergency.mp3

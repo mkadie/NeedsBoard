@@ -250,21 +250,17 @@ VARIANTS = {
         # Button grid layout — 3x2 for 160x128 display
         "button_cols": 3,
         "button_rows": 2,
+
+        # Defaults below can be overridden in config.txt
         "debounce_time": 0.5,
         "start_menu": "base_fruitjam.menu",
-
-        # Emergency push — fast-path audio on wake
-        # When enabled, checks emergency_pin at boot. If held, plays
-        # the sound immediately after DAC init, before display/menus.
-        # emergency_push_pin defaults to encoder_button_pin if not set.
+        "volume": 80,
         "emergency_push_enabled": True,
         "emergency_push_sound": "/button_sounds/emergency.mp3",
-
-        # Sleep — software idle mode (no alarm module on RP2350B)
-        # Powers down display, DAC, and ESP32 via PERIPH_RESET
-        # Polls encoder for wake
         "sleep_enabled": True,
         "sleep_timeout": 120,
+
+        # Hardware-specific sleep settings (not in config.txt)
         "sleep_mode": "software_idle",
         "sleep_wake_pins": [],
     },
