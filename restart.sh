@@ -1,165 +1,133 @@
 #!/bin/bash
-# restart.sh — Recreate the ES8311 CircuitPython library from scratch.
+# restart.sh — Rebuild and verify the AAC production system.
 #
-# This script documents every step needed to reproduce the ES8311 driver
-# and deploy it to the ES3C28P board. Run it if you need to rebuild
-# everything from a clean state.
+# This script documents every step needed to deploy and verify
+# the AAC device from a clean state. Run it after major changes
+# or when setting up a new device.
 #
 # Prerequisites:
-#   - ES3C28P board connected via USB (shows up as CIRCUITPY)
-#   - CircuitPython 10.x installed on the board
-#   - neopixel.mpy in CIRCUITPY/lib/ (for mic_level example)
-#   - Python 3 + pytest on the host (for PC tests)
+#   - Device connected via USB (shows up as CIRCUITPY or CIRCUITPY1)
+#   - CircuitPython installed on the device
+#   - Python 3 + pyserial on the host
 #
 # What this script does:
-#   1. Verifies the board is connected
-#   2. Runs the PC-based unit tests
-#   3. Deploys the driver to the board
-#   4. Runs the hardware test suite on the board
-#   5. Deploys the tone example to verify audio output
+#   1. Verifies device connections
+#   2. Deploys production code
+#   3. Reboots each device and captures boot output
+#   4. Verifies successful boot
 #
 # Usage:
-#   ./restart.sh           # Full rebuild + test
-#   ./restart.sh --quick   # Just deploy, skip tests
+#   ./restart.sh              # Full deploy + verify
+#   ./restart.sh --quick      # Deploy code only, skip verify
+#   ./restart.sh --verify     # Just verify (no deploy)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUNDLE_DIR="$SCRIPT_DIR/circuitpython_es8311"
-LOCAL_DIR="$SCRIPT_DIR/es8311_local"
-DEPLOY="$SCRIPT_DIR/deploy.sh"
 
 QUICK=false
-if [ "$1" = "--quick" ]; then
-    QUICK=true
-fi
+VERIFY_ONLY=false
+for arg in "$@"; do
+    case "$arg" in
+        --quick) QUICK=true ;;
+        --verify) VERIFY_ONLY=true ;;
+    esac
+done
 
 echo "=============================================="
-echo "ES8311 CircuitPython Library — Restart Script"
+echo "AAC Device — Restart & Verify"
 echo "=============================================="
 echo ""
 
-# ── Step 1: Verify board connection ──
-echo "Step 1: Checking for CIRCUITPY drive..."
-CIRCUITPY=""
-for path in /media/*/CIRCUITPY; do
-    if [ -d "$path" ]; then
-        CIRCUITPY="$path"
-        break
-    fi
+# ── Step 1: Find devices ──
+echo "Step 1: Checking for connected devices..."
+
+DEVICES=()
+for port in /dev/ttyACM*; do
+    [ -e "$port" ] || continue
+    model=$(udevadm info -q property "$port" 2>/dev/null | grep "ID_MODEL=" | head -1 | cut -d= -f2)
+    echo "  $port: $model"
+    DEVICES+=("$port:$model")
 done
 
-if [ -z "$CIRCUITPY" ]; then
-    echo "  WARNING: CIRCUITPY not found. Board tests will be skipped."
-    echo "  Plug in the ES3C28P and re-run to test on hardware."
-    BOARD_CONNECTED=false
-else
-    echo "  Found: $CIRCUITPY"
-    cat "$CIRCUITPY/boot_out.txt" 2>/dev/null | head -1
-    BOARD_CONNECTED=true
-fi
-echo ""
-
-# ── Step 2: Verify files exist ──
-echo "Step 2: Verifying project files..."
-MISSING=false
-for f in \
-    "$BUNDLE_DIR/es8311.py" \
-    "$BUNDLE_DIR/README.md" \
-    "$BUNDLE_DIR/LICENSE" \
-    "$BUNDLE_DIR/setup.py" \
-    "$BUNDLE_DIR/tests/test_registers.py" \
-    "$BUNDLE_DIR/tests/test_hardware.py" \
-    "$BUNDLE_DIR/examples/es8311_tone.py" \
-    "$BUNDLE_DIR/examples/es8311_mic_level.py" \
-    "$BUNDLE_DIR/examples/es8311_play_and_record.py" \
-    "$LOCAL_DIR/es8311.py" \
-    "$LOCAL_DIR/README.md" \
-    "$LOCAL_DIR/tests/test_hardware.py" \
-    "$LOCAL_DIR/examples/play_tone.py" \
-    "$LOCAL_DIR/examples/mic_level.py" \
-    "$LOCAL_DIR/examples/play_and_record.py"; do
-    if [ ! -f "$f" ]; then
-        echo "  MISSING: $f"
-        MISSING=true
-    fi
-done
-
-if [ "$MISSING" = true ]; then
-    echo "  ERROR: Some files are missing. Cannot continue."
+if [ ${#DEVICES[@]} -eq 0 ]; then
+    echo "  No devices found."
     exit 1
 fi
-echo "  All files present."
+
+FRUITJAM_PORT=""
+BADGE_PORT=""
+for dev in "${DEVICES[@]}"; do
+    port="${dev%%:*}"
+    model="${dev#*:}"
+    case "$model" in
+        *Fruit_Jam*) FRUITJAM_PORT="$port" ;;
+        *Pico*) BADGE_PORT="$port" ;;
+    esac
+done
+
 echo ""
 
-# ── Step 3: Run PC unit tests ──
-if [ "$QUICK" = false ]; then
-    echo "Step 3: Running PC unit tests..."
-    cd "$BUNDLE_DIR"
-    if command -v python3 &>/dev/null && python3 -m pytest --version &>/dev/null 2>&1; then
-        python3 -m pytest tests/test_registers.py -v 2>&1 | tail -5
+# ── Step 2: Deploy ──
+if [ "$VERIFY_ONLY" = false ]; then
+    echo "Step 2: Deploying production code..."
+    if [ "$QUICK" = true ]; then
+        bash "$SCRIPT_DIR/deploy.sh" --code-only
     else
-        echo "  SKIPPED: pytest not installed (pip install pytest)"
+        bash "$SCRIPT_DIR/deploy.sh"
     fi
-    echo ""
 else
-    echo "Step 3: SKIPPED (--quick mode)"
+    echo "Step 2: SKIPPED (--verify mode)"
     echo ""
 fi
 
-# ── Step 4: Deploy driver to board ──
-if [ "$BOARD_CONNECTED" = true ]; then
-    echo "Step 4: Deploying driver to board..."
-    bash "$DEPLOY" lib
-    echo ""
+# ── Step 3: Verify boot ──
+if [ "$QUICK" = false ]; then
+    echo "Step 3: Verifying device boot..."
 
-    # ── Step 5: Run hardware tests ──
-    if [ "$QUICK" = false ]; then
-        echo "Step 5: Running hardware tests on board..."
-        bash "$DEPLOY" test
-        echo "  Waiting for board to run tests (15s)..."
+    verify_device() {
+        local port="$1"
+        local name="$2"
 
-        # Give the board time to auto-reload and run
-        sleep 3
-
-        # Read serial output
-        if command -v python3 &>/dev/null; then
-            python3 -c "
-import serial, time
-try:
-    ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
-    ser.write(b'\x03'); time.sleep(0.5)
-    ser.write(b'\x04'); time.sleep(1)
-    end = time.time() + 30
-    while time.time() < end:
-        data = ser.read(ser.in_waiting or 1)
-        if data:
-            text = data.decode('utf-8', errors='replace')
-            print(text, end='')
-            if 'Results:' in text:
-                time.sleep(1)
-                # Read any remaining output
-                data = ser.read(ser.in_waiting or 1)
-                if data:
-                    print(data.decode('utf-8', errors='replace'), end='')
-                break
-    ser.close()
-except Exception as e:
-    print('  Could not read serial: {}'.format(e))
-" 2>&1 | grep -E '(PASS|FAIL|Results|==)' || echo "  (Could not capture serial output)"
+        if [ -z "$port" ]; then
+            echo "  $name: not connected, skipping"
+            return
         fi
-        echo ""
-    else
-        echo "Step 5: SKIPPED (--quick mode)"
-        echo ""
-    fi
 
-    # ── Step 6: Deploy tone example ──
-    echo "Step 6: Deploying tone example..."
-    bash "$DEPLOY" tone
-    echo ""
+        echo "  $name ($port): rebooting..."
+        python3 -c "
+import serial, time
+ser = serial.Serial('$port', 115200, timeout=1)
+ser.write(b'\x03'); time.sleep(0.3)
+ser.write(b'\x04')
+start = time.monotonic()
+lines = []
+while time.monotonic() - start < 15:
+    data = ser.read(1024)
+    if data:
+        for line in data.decode('utf-8', errors='replace').splitlines():
+            line = line.strip()
+            if line and 'AAC Device ready' in line:
+                lines.append(line)
+            elif 'Traceback' in line or 'Error' in line:
+                lines.append('ERROR: ' + line)
+    if any('ready' in l.lower() for l in lines):
+        break
+    if any('ERROR' in l for l in lines):
+        break
+ser.close()
+for l in lines:
+    print('    ' + l)
+if not lines:
+    print('    WARNING: No output captured')
+" 2>&1 || echo "    Could not connect to serial"
+        echo ""
+    }
+
+    verify_device "$FRUITJAM_PORT" "Fruit Jam"
+    verify_device "$BADGE_PORT" "OLED Badge"
 else
-    echo "Steps 4-6: SKIPPED (board not connected)"
+    echo "Step 3: SKIPPED (--quick mode)"
     echo ""
 fi
 
@@ -167,20 +135,19 @@ fi
 echo "=============================================="
 echo "Restart complete."
 echo ""
-echo "Project structure:"
-echo "  circuitpython_es8311/   Community bundle (generic, publishable)"
-echo "  es8311_local/           Board-local (ES3C28P defaults)"
+echo "Supported devices:"
+echo "  FRUITJAM_V2          — Color LCD, TLV320 DAC, encoder"
+echo "  RP2350_OLED_BADGE_V3 — OLED 128x32, direct I2S, encoder"
+echo "  CYD_PLUS             — Touch screen, ES8311 codec"
+echo "  RP2350_V2            — LCD, buttons + encoder"
 echo ""
 echo "Deploy commands:"
-echo "  ./deploy.sh tone    Play 440Hz tone"
-echo "  ./deploy.sh mic     Mic level on NeoPixel"
-echo "  ./deploy.sh both    Tone + mic monitoring"
-echo "  ./deploy.sh test    Run hardware tests"
+echo "  ./deploy.sh              Deploy to all devices"
+echo "  ./deploy.sh fruitjam     Deploy to Fruit Jam only"
+echo "  ./deploy.sh badge        Deploy to Badge only"
+echo "  ./deploy.sh --code-only  Python files only (keep config)"
 echo ""
-echo "Key pin assignments (ES3C28P):"
-echo "  I2C: SCL=GPIO15, SDA=GPIO16"
-echo "  I2S: MCLK=GPIO4, BCLK=GPIO5, WS=GPIO7"
-echo "  I2S DOUT=GPIO8 (DAC), DIN=GPIO6 (ADC/mic)"
-echo "  Amp enable: GPIO1 (LOW=on)"
-echo "  NeoPixel: GPIO42"
+echo "Configuration:"
+echo "  config.txt  — User settings (per device)"
+echo "  NOTES.md    — Development notes and future ideas"
 echo "=============================================="
