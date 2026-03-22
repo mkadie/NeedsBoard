@@ -835,6 +835,7 @@ Every `.menu` file must have a `[menu]` section with these keys:
 | Key | Required | Values | Description |
 |-----|----------|--------|-------------|
 | `name` | Yes | text | Display name for this menu |
+| `text_description` | Optional | text (≤21 chars) | Short text for OLED screens and hint overlay |
 | `type` | Yes | `grid`, `list`, `builder` | How items are presented |
 | `columns` | Grid only | number | Number of columns in the grid |
 | `rows` | Grid only | number | Number of rows in the grid |
@@ -854,6 +855,7 @@ Every other section defines a press item:
 | Key | Required | Values | Description |
 |-----|----------|--------|-------------|
 | `label` | Yes | text | Text shown on the button / in the list |
+| `text_description` | Optional | text (≤21 chars) | Short text for OLED screens and hint overlay |
 | `position` | Grid only | number | Grid position (1 = top-left) |
 | `image` | Encouraged | file path | Picture for this item |
 | `sound` | Optional | file path | MP3 to play when pressed |
@@ -906,20 +908,87 @@ When adding a new press item, make sure you have:
 
 ---
 
+## Text-Mode Displays
+
+OLED displays (e.g., SSD1306 128x32) use `text_description` instead of images.
+The hardware config key `display_text_mode = True` enables this mode. The
+`text_description` field should be 21 characters or fewer to fit a 128x32
+OLED at scale=1.
+
+Two display modes are available, controlled by `show_border` in `config.txt`:
+
+### show_border = true (V1 style)
+
+Single line of text, centered on screen, surrounded by a white border.
+Best for a bold, focused display of the current item.
+
+```
++----------------------------+
+|                            |
+|  +-----------------------+ |
+|  |   I am thirsty        | |
+|  +-----------------------+ |
+|                            |
++----------------------------+
+```
+
+### show_border = false (3-line scrolling list)
+
+Three lines shown simultaneously: previous item (dim), current item
+(highlighted/bold), and next item (dim). Gives the user context about
+what is above and below the current selection.
+
+```
++----------------------------+
+|    Hungry                  |  <-- previous (dim)
+|  > Thirsty                 |  <-- current (highlighted)
+|    Bathroom                |  <-- next (dim)
++----------------------------+
+```
+
+On color screens, `text_description` serves as hint text when
+`display_hint_text = true` in `config.txt`. The text is overlaid at
+the bottom of the screen on top of the image.
+
+---
+
+## config.txt
+
+User-configurable runtime settings stored in `/config.txt` on the device.
+These override the corresponding defaults in `hardware_config.py`. The file
+uses the same `key = value` format as `.menu` files. Lines starting with
+`#` are comments.
+
+| Key | Values | Description |
+|-----|--------|-------------|
+| `sleep_enabled` | `true` / `false` | Enable auto-sleep after inactivity |
+| `sleep_timeout` | seconds | Seconds of inactivity before sleeping |
+| `volume` | 0-100 | Audio volume level |
+| `debounce_time` | seconds (float) | Input debounce time to prevent double-presses |
+| `encoder_direction_flip` | `true` / `false` | Flip rotary encoder scroll direction |
+| `show_border` | `true` / `false` | OLED border mode (see Text-Mode Displays) |
+| `display_hint_text` | `true` / `false` | Show text_description overlay on color screens |
+| `start_menu` | filename | Starting menu file in `/menus/` directory |
+| `emergency_push_enabled` | `true` / `false` | Enable emergency sound on boot button hold |
+| `emergency_push_sound` | file path | Sound file for emergency push |
+
+---
+
 ## Implementation Status
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Grid menus | Planned | First to implement |
-| List menus with scrolling | Planned | Second priority |
-| Sound playback action | Working | Already in AudioPlayer |
-| Image display action | Working | Already in DisplayManager |
+| Grid menus | Working | |
+| List menus with scrolling | Working | |
+| Sound playback action | Working | AudioPlayer |
+| Image display action | Working | DisplayManager |
 | Vibration action | Planned | Needs motor/haptic hardware |
 | Light/NeoPixel action | Planned | NeoPixel exists, needs action wiring |
-| Text display action | Planned | Needs text rendering on display |
-| Submenu navigation | Planned | Core of HyperCard metaphor |
-| Back navigation | Planned | Stack-based history |
-| `.menu` file parser | Planned | Simple INI-style reader |
+| Text display action | Working | text_description + display_hint_text |
+| Submenu navigation | Working | |
+| Back navigation | Working | Stack-based history |
+| `.menu` file parser | Working | INI-style reader |
+| Rotary encoder navigation | Working | encoder_navigation config |
 | Builder mode (spelling) | Future | Requires keyboard layout design |
 | TTS (text-to-speech) | Future | May need WiFi or external TTS chip |
 | QR code scanning | Future | Needs camera hardware |
@@ -933,4 +1002,5 @@ When adding a new press item, make sure you have:
 
 | Date | Change |
 |------|--------|
+| 2026-03-22 | Add text_description, config.txt, OLED badge support, emergency push, multi-device architecture |
 | 2026-03-19 | Initial design document created |
