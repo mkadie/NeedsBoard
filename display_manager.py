@@ -41,6 +41,7 @@ class DisplayManager:
         self._zone_height = self._height // self._rows
         self._text_mode = config.get("display_text_mode", False)
         self._text_area = None
+        self._text_lines = []
 
         displayio.release_displays()
 
