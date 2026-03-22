@@ -16,7 +16,7 @@
 
 [menu]
 name = Food & Drink
-text_description = Food and drink choices
+text_description = Food and drink
 type = grid
 columns = 3
 rows = 2
@@ -64,7 +64,7 @@ position = 5
 
 [back_button]
 label = Back
-text_description = Go back to home screen
+text_description = Back to home
 image = images/food/back.bmp
 position = 6
 back =

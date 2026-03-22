@@ -264,6 +264,83 @@ VARIANTS = {
         "sleep_mode": "software_idle",
         "sleep_wake_pins": [],
     },
+
+    "RP2350_OLED_BADGE_V3": {
+        "name": "RP2350_OLED_BADGE_V3",
+
+        # Display — SSD1306 OLED 128x32 monochrome via I2C
+        "display_type": "SSD1306",
+        "screen_width": 128,
+        "screen_height": 32,
+        "display_rotation": 180,
+        "display_inverted": False,
+        "background_image": None,  # Text-only display
+        "display_text_mode": True,  # Use text_description instead of images
+
+        # I2C bus (OLED + EEPROM)
+        "i2c_scl": "GP17",
+        "i2c_sda": "GP16",
+        "i2c_freq": 400_000,
+
+        # Audio — direct I2S (no codec, no Peripherals)
+        "sound_system": "I2S_DIRECT",
+        "codec_sample_rate": 22050,
+        "i2s_bclk": "GP4",
+        "i2s_ws": "GP5",
+        "i2s_dout": "GP6",
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # No FULL_POWER pin — always on
+        "full_power_pin": None,
+
+        # SD Card
+        "sd_card": True,
+        "sd_cs": "GP21",
+        "sd_sclk": "GP14",
+        "sd_mosi": "GP15",
+        "sd_miso": "GP12",
+        "sd_shares_display_spi": False,
+
+        # Touch screen — none
+        "touch_screen": False,
+
+        # Physical buttons — none (badge has no external buttons)
+        "max_buttons": 0,
+
+        # Rotary encoder — navigation mode
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "GP0",
+        "encoder_pin_b": "GP1",
+        "encoder_button_pin": "GP2",
+        "encoder_button_index": 0,
+
+        # Wake / extra button
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+
+        # Status LED — none
+        "neopixel_pin": None,
+
+        # Button grid layout — single column for text scrolling
+        "button_cols": 1,
+        "button_rows": 6,
+
+        # Defaults (overridable in config.txt)
+        "debounce_time": 0.5,
+        "start_menu": "base_fruitjam.menu",
+        "volume": 80,
+        "emergency_push_enabled": True,
+        "emergency_push_sound": "/button_sounds/emergency.mp3",
+        "sleep_enabled": True,
+        "sleep_timeout": 120,
+
+        # Hardware-specific sleep settings
+        "sleep_mode": "light",
+        "sleep_wake_pins": [],
+    },
 }
 
 # Change this single line to switch machine variant

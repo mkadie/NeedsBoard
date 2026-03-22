@@ -18,7 +18,11 @@ def _pin(name):
 
 
 class DisplayManager:
-    """Manages ILI9341 display, background image, and button grid geometry."""
+    """Manages display hardware, background images, and button grid geometry.
+
+    Supports SPI color displays (ILI9341, ST7735R) and I2C OLED (SSD1306).
+    Text-mode displays show text_description instead of images.
+    """
 
     def __init__(self, config, spi=None):
         """Initialize display hardware from config dict.
@@ -35,9 +39,52 @@ class DisplayManager:
         self._rows = config["button_rows"]
         self._zone_width = self._width // self._cols
         self._zone_height = self._height // self._rows
+        self._text_mode = config.get("display_text_mode", False)
+        self._text_area = None
 
         displayio.release_displays()
 
+        display_type = config.get("display_type", "ILI9341")
+
+        if display_type == "SSD1306":
+            self._init_ssd1306(config)
+        else:
+            self._init_spi_display(config, spi)
+
+        # Display group
+        self._splash = displayio.Group()
+        self._display.root_group = self._splash
+
+        if self._text_mode:
+            self._init_text_display()
+        else:
+            bg = config.get("background_image")
+            if bg:
+                try:
+                    self._load_background(bg)
+                except Exception as e:
+                    print("Initial background skipped:", e)
+
+        # Selection highlight overlay
+        self._highlight = None
+        self._highlight_index = -1
+
+    def _init_ssd1306(self, config):
+        """Initialize SSD1306 OLED via I2C."""
+        from i2cdisplaybus import I2CDisplayBus
+        import adafruit_displayio_ssd1306
+
+        i2c = busio.I2C(_pin(config["i2c_scl"]), _pin(config["i2c_sda"]))
+        display_bus = I2CDisplayBus(i2c, device_address=0x3C)
+        self._display = adafruit_displayio_ssd1306.SSD1306(
+            display_bus,
+            width=self._width,
+            height=self._height,
+            rotation=config.get("display_rotation", 0),
+        )
+
+    def _init_spi_display(self, config, spi):
+        """Initialize SPI color display (ILI9341 or ST7735R)."""
         # SPI bus — use shared bus if provided, otherwise create one
         if spi is not None:
             self._spi = spi
@@ -97,19 +144,107 @@ class DisplayManager:
             self._backlight.direction = digitalio.Direction.OUTPUT
             self._backlight.value = True
 
-        # Display group — background loaded later by menu system or fallback
-        self._splash = displayio.Group()
-        self._display.root_group = self._splash
-        bg = config.get("background_image")
-        if bg:
-            try:
-                self._load_background(bg)
-            except Exception as e:
-                print("Initial background skipped:", e)
+    def _init_text_display(self):
+        """Set up text-mode display (OLED).
 
-        # Selection highlight overlay
-        self._highlight = None
-        self._highlight_index = -1
+        Two modes controlled by show_border config:
+          True:  White border, single centered line (V1 style)
+          False: 3-line list — prev (dim), current (inverted), next (dim)
+        """
+        import terminalio
+        from adafruit_display_text import label
+
+        self._show_border = self._config.get("show_border", True)
+        self._text_lines = []
+
+        if self._show_border:
+            # --- Single-line bordered mode ---
+            border = 5
+            bg = displayio.Bitmap(self._width, self._height, 1)
+            bg_pal = displayio.Palette(1)
+            bg_pal[0] = 0xFFFFFF
+            self._splash.append(displayio.TileGrid(bg, pixel_shader=bg_pal))
+
+            inner = displayio.Bitmap(
+                self._width - border * 2, self._height - border * 2, 1)
+            inner_pal = displayio.Palette(1)
+            inner_pal[0] = 0x000000
+            self._splash.append(displayio.TileGrid(
+                inner, pixel_shader=inner_pal, x=border, y=border))
+
+            self._text_area = label.Label(
+                terminalio.FONT,
+                text="Ready",
+                color=0xFFFFFF,
+                x=10,
+                y=self._height // 2 - 1,
+            )
+            self._splash.append(self._text_area)
+        else:
+            # --- 3-line scrolling list mode ---
+            # Black background
+            bg = displayio.Bitmap(self._width, self._height, 1)
+            bg_pal = displayio.Palette(1)
+            bg_pal[0] = 0x000000
+            self._splash.append(displayio.TileGrid(bg, pixel_shader=bg_pal))
+
+            # Highlight bar behind middle line (white bar, black text)
+            bar = displayio.Bitmap(self._width, 10, 1)
+            bar_pal = displayio.Palette(1)
+            bar_pal[0] = 0xFFFFFF
+            self._splash.append(displayio.TileGrid(
+                bar, pixel_shader=bar_pal, x=0, y=11))
+
+            # 3 text lines at y=5, y=16, y=27
+            for i, (y, color) in enumerate([
+                (5, 0xFFFFFF),    # prev — white on black
+                (16, 0x000000),   # current — black on white bar
+                (27, 0xFFFFFF),   # next — white on black
+            ]):
+                line = label.Label(
+                    terminalio.FONT,
+                    text="",
+                    color=color,
+                    x=2,
+                    y=y,
+                )
+                self._splash.append(line)
+                self._text_lines.append(line)
+
+    def set_text_lines(self, prev_text, current_text, next_text):
+        """Update the 3-line text display or single-line display."""
+        if self._text_lines:
+            self._text_lines[0].text = prev_text
+            self._text_lines[1].text = current_text
+            self._text_lines[2].text = next_text
+        elif self._text_area is not None:
+            self._text_area.text = current_text
+
+    def set_text(self, text):
+        """Update text on any display.
+
+        On 3-line OLED, updates the current (middle) line.
+        On bordered OLED, updates the single text area.
+        On color displays, creates a text overlay at the bottom.
+        """
+        if self._text_lines:
+            self._text_lines[1].text = text
+            return
+        if self._text_area is None and not self._text_mode:
+            # Create overlay for color screens on first use
+            import terminalio
+            from adafruit_display_text import label
+            self._text_area = label.Label(
+                terminalio.FONT,
+                text="",
+                color=0xFFFFFF,
+                background_color=0x000000,
+                x=2,
+                y=self._height - 8,
+            )
+            self._splash.append(self._text_area)
+        if self._text_area is not None:
+            self._text_area.text = text
 
     def _load_background(self, image_path):
         """Load and display a BMP background image."""
@@ -128,7 +263,9 @@ class DisplayManager:
         print("Background loaded")
 
     def set_background(self, image_path):
-        """Swap the background image (used when navigating between menus)."""
+        """Swap the background image. No-op for text-mode displays."""
+        if self._text_mode:
+            return
         self._load_background(image_path)
 
     def _create_highlight(self):
@@ -159,9 +296,12 @@ class DisplayManager:
     def set_highlight(self, index):
         """Move the selection highlight to a grid cell by index.
 
+        No-op for text-mode displays (text scrolling handles selection).
         Args:
             index: Grid cell index (0-based), or -1 to hide.
         """
+        if self._text_mode:
+            return
         if index == self._highlight_index:
             return
 

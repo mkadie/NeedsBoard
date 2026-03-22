@@ -59,6 +59,7 @@ class InputManager:
         self._last_encoder_pos = 0
         # Encoder navigation: rotate to select, press to activate
         self._encoder_nav = config.get("encoder_navigation", False)
+        self._encoder_flip = -1 if config.get("encoder_direction_flip", False) else 1
         self._selected_index = 0
         max_grid = config.get("button_cols", 4) * config.get("button_rows", 2)
         self._max_index = max_grid
@@ -287,8 +288,8 @@ class InputManager:
             if delta != 0:
                 self._last_encoder_pos = pos
                 old = self._selected_index
-                # Negate: clockwise = move right/down
-                self._selected_index = (self._selected_index - delta) % self._max_index
+                # Apply direction (flip via config)
+                self._selected_index = (self._selected_index - delta * self._encoder_flip) % self._max_index
                 if self._debug:
                     print("Encoder: select", self._selected_index,
                           "(was", old, "delta", delta, ")")

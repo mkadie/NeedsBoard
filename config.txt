@@ -23,6 +23,13 @@ volume = 80
 # Debounce time in seconds (prevents double-presses)
 debounce_time = 0.5
 
+# Flip encoder scroll direction (true/false)
+encoder_direction_flip = true
+
+# Show border around text on OLED (true/false)
+# When false, displays 3 lines: previous, current, next item
+show_border = false
+
 # --- Menu ---
 # Starting menu file (in /menus directory)
 start_menu = base_fruitjam.menu

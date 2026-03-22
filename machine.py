@@ -92,18 +92,18 @@ class Machine:
         if self.storage.sd_available:
             self.storage.sync_flash_to_sd()
 
+        # Display — pass shared SPI bus if SD card shares it
+        spi = self.storage.spi if self._config.get("sd_shares_display_spi") else None
+        self.display = DisplayManager(self._config, spi=spi)
+
         # Shared I2C bus (touch + codec may share it)
-        # Skip if Peripherals already owns the I2C bus
+        # Skip if Peripherals owns it or display is I2C (SSD1306)
         self._i2c = None
-        if self._peripherals is None:
+        if self._peripherals is None and self._config.get("display_type") != "SSD1306":
             scl = _pin(self._config.get("i2c_scl"))
             sda = _pin(self._config.get("i2c_sda"))
             if scl and sda:
                 self._i2c = busio.I2C(scl, sda, frequency=self._config.get("i2c_freq", 400_000))
-
-        # Display — pass shared SPI bus if SD card shares it
-        spi = self.storage.spi if self._config.get("sd_shares_display_spi") else None
-        self.display = DisplayManager(self._config, spi=spi)
         print("Display ready")
 
         # Full audio init (reuses Peripherals audio if emergency already started)
@@ -294,8 +294,10 @@ class Machine:
 
         # Show initial highlight if encoder navigation is active
         self._has_encoder_nav = self._config.get("encoder_navigation", False)
+        self._last_shown_index = -1
         if self._has_encoder_nav:
             self.display.set_highlight(self.input.selected_index)
+            self._update_text_for_index(self.input.selected_index)
 
         while True:
             button = self.input.poll()
@@ -304,10 +306,49 @@ class Machine:
                 self._handle_press(button)
             else:
                 self.sleep.check()
-            # Update highlight position from encoder
+            # Update highlight and text for encoder navigation
             if self._has_encoder_nav:
-                self.display.set_highlight(self.input.selected_index)
+                idx = self.input.selected_index
+                self.display.set_highlight(idx)
+                self._update_text_for_index(idx)
             time.sleep(0.01)
+
+    def _get_item_text(self, index):
+        """Get text_description for a grid item by index, with wrapping."""
+        if not self._grid:
+            return ""
+        idx = index % len(self._grid)
+        item = self._grid[idx]
+        if item:
+            return item.get("text_description", item.get("label", ""))
+        return ""
+
+    def _update_text_for_index(self, index):
+        """Update display text with prev/current/next items."""
+        if index == self._last_shown_index:
+            return
+        self._last_shown_index = index
+        if not self._grid:
+            return
+        n = len(self._grid)
+        prev_text = self._get_item_text((index - 1) % n)
+        curr_text = self._get_item_text(index)
+        next_text = self._get_item_text((index + 1) % n)
+
+        if hasattr(self.display, 'set_text_lines'):
+            self.display.set_text_lines(prev_text, curr_text, next_text)
+        else:
+            self.display.set_text(curr_text)
+
+    def _reset_selection(self):
+        """Reset encoder selection to first item and update text."""
+        if self._has_encoder_nav:
+            self.input._selected_index = 0
+            if hasattr(self.input, '_encoder') and self.input._encoder:
+                self.input._encoder.position = 0
+                self.input._last_encoder_pos = 0
+        self._last_shown_index = -1  # Force text refresh
+        self._update_text_for_index(0)
 
     def _handle_press(self, button_index):
         """Handle a button press — dispatch to menu or legacy mode."""
@@ -327,6 +368,9 @@ class Machine:
             return  # Empty grid slot
 
         print("Press:", item.get("label", item.get("id", "?")))
+        # Show the pressed item's text on screen
+        text = item.get("text_description", item.get("label", ""))
+        self.display.set_text(text)
         self.set_status("playing")
 
         try:
@@ -347,6 +391,7 @@ class Machine:
             if self._menu_stack.back():
                 self._build_grid()
                 self._update_display()
+                self._reset_selection()
                 print("Back to:", self._menu_stack.name)
             else:
                 print("Already at root menu")
@@ -356,6 +401,7 @@ class Machine:
                 self._menu_stack.navigate(menu_file)
                 self._build_grid()
                 self._update_display()
+                self._reset_selection()
                 print("Navigated to:", self._menu_stack.name)
             except Exception as e:
                 print("Navigation error:", e)

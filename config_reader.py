@@ -54,6 +54,8 @@ def apply_config(hw_config, user_config):
         "sleep_timeout",
         "volume",
         "debounce_time",
+        "encoder_direction_flip",
+        "show_border",
         "start_menu",
         "emergency_push_enabled",
         "emergency_push_sound",
