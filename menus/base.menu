@@ -59,7 +59,7 @@ position = 4
 
 [stinky]
 label = Stinky
-text_description = F* you
+text_description = You stink
 image = images/stinky.bmp
 sound = /button_sounds/stinky.mp3
 position = 5

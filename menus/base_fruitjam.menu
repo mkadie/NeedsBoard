@@ -31,9 +31,9 @@ position = 1
 
 [stinky]
 label = Stinky
-text_description = F* you
+text_description = You stink
 image = images/base/stinky.bmp
-sound = /button_sounds/f_you.mp3
+sound = /button_sounds/stinky.mp3
 position = 2
 
 [more]
