@@ -19,6 +19,7 @@
 
 [menu]
 name = Base Menu
+text_description = Home screen — basic needs and responses
 type = grid
 columns = 4
 rows = 2
@@ -28,24 +29,28 @@ background = /needs_small.bmp
 
 [thirsty]
 label = Thirsty
+text_description = I am thirsty
 image = images/thirsty.bmp
 sound = /button_sounds/thirsty.mp3
 position = 1
 
 [hungry]
 label = Hungry
+text_description = I am hungry
 image = images/hungry.bmp
 sound = /button_sounds/hungry.mp3
 position = 2
 
 [more]
 label = More
+text_description = More options — food and drink
 image = images/more.bmp
 submenu = food.menu
 position = 3
 
 [bathroom]
 label = Bathroom
+text_description = I need to go to the bathroom
 image = images/bathroom.bmp
 sound = /button_sounds/bathroom.mp3
 position = 4
@@ -54,12 +59,14 @@ position = 4
 
 [stinky]
 label = Stinky
+text_description = Something is stinky, I need changing
 image = images/stinky.bmp
 sound = /button_sounds/stinky.mp3
 position = 5
 
 [yes]
 label = Yes
+text_description = Yes
 image = images/yes.bmp
 sound = /button_sounds/yes.mp3
 vibrate = short
@@ -68,6 +75,7 @@ position = 6
 
 [no]
 label = No
+text_description = No
 image = images/no.bmp
 sound = /button_sounds/no.mp3
 vibrate = short
@@ -76,6 +84,7 @@ position = 7
 
 [please]
 label = Please
+text_description = Please, thank you
 image = images/please.bmp
 sound = /button_sounds/please.mp3
 position = 8

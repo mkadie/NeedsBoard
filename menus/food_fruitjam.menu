@@ -16,6 +16,7 @@
 
 [menu]
 name = Food & Drink
+text_description = Food and drink choices
 type = grid
 columns = 3
 rows = 2
@@ -26,18 +27,21 @@ background = images/food/food_board.bmp
 
 [water]
 label = Water
+text_description = I want water
 image = images/food/water.bmp
 sound = sounds/food/water.mp3
 position = 1
 
 [apple]
 label = Apple
+text_description = I want an apple
 image = images/food/apple.bmp
 sound = sounds/food/apple.mp3
 position = 2
 
 [milk]
 label = Milk
+text_description = I want milk
 image = images/food/milk.bmp
 sound = sounds/food/milk.mp3
 position = 3
@@ -46,18 +50,21 @@ position = 3
 
 [banana]
 label = Banana
+text_description = I want a banana
 image = images/food/banana.bmp
 sound = sounds/food/banana.mp3
 position = 4
 
 [cracker]
 label = Cracker
+text_description = I want a cracker
 image = images/food/cracker.bmp
 sound = sounds/food/cracker.mp3
 position = 5
 
 [back_button]
 label = Back
+text_description = Go back to home screen
 image = images/food/back.bmp
 position = 6
 back =
