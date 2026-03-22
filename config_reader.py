@@ -53,6 +53,7 @@ def apply_config(hw_config, user_config):
         "sleep_enabled",
         "sleep_timeout",
         "volume",
+        "playback_speed",
         "debounce_time",
         "encoder_direction_flip",
         "play_on_release",

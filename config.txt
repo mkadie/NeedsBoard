@@ -19,6 +19,10 @@ sleep_timeout = 120
 # Volume level (0-100)
 volume = 80
 
+# Playback speed as percentage (50=half speed, 100=normal, 150=fast)
+# Slower speeds help pre-verbal users understand speech
+playback_speed = 100
+
 # --- Input ---
 # Debounce time in seconds (prevents double-presses)
 debounce_time = 0.5

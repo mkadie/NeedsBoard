@@ -35,6 +35,7 @@ class AudioPlayer:
         self._current_rate = config["codec_sample_rate"]
         self._volume = config["volume"]
         self._sound_system = config["sound_system"]
+        self._playback_speed = config.get("playback_speed", 100)
 
         if self._sound_system == "FRUITJAM_DAC":
             self._init_fruitjam_dac(config, peripherals)
@@ -105,18 +106,26 @@ class AudioPlayer:
         try:
             f = open(sound_file, "rb")
             mp3 = audiomp3.MP3Decoder(f)
-            print("Audio: decoded, rate=", mp3.sample_rate)
+            native_rate = mp3.sample_rate
+
+            # Adjust sample rate for playback speed
+            target_rate = int(native_rate * self._playback_speed / 100)
+            if target_rate != native_rate:
+                mp3.sample_rate = target_rate
+                print("Audio: rate={} -> {} ({}%)".format(
+                    native_rate, target_rate, self._playback_speed))
+            else:
+                print("Audio: rate=", native_rate)
 
             # Switch codec sample rate if needed
             if self._codec:
-                mp3_rate = mp3.sample_rate
-                if mp3_rate != self._current_rate:
-                    print("Switching codec to", mp3_rate, "Hz")
+                if target_rate != self._current_rate:
+                    print("Switching codec to", target_rate, "Hz")
                     self._audio.stop()
-                    self._codec.init(sample_rate=mp3_rate, bits=16)
+                    self._codec.init(sample_rate=target_rate, bits=16)
                     self._codec.set_volume(self._volume)
                     self._codec.mute(False)
-                    self._current_rate = mp3_rate
+                    self._current_rate = target_rate
 
             self._audio.play(mp3)
             while self._audio.playing:
@@ -136,6 +145,10 @@ class AudioPlayer:
     def stop(self):
         """Stop current playback."""
         self._audio.stop()
+
+    def set_playback_speed(self, speed):
+        """Set playback speed as percentage (50=half speed, 100=normal, 150=fast)."""
+        self._playback_speed = max(25, min(200, speed))
 
     def set_volume(self, volume):
         """Set volume (0-100). Only effective with ES8311 codec."""
