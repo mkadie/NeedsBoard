@@ -213,13 +213,14 @@ class DisplayManager:
                 self._text_lines.append(line)
 
     def set_text_lines(self, prev_text, current_text, next_text):
-        """Update the 3-line text display or single-line display."""
+        """Update the 3-line text display, single-line, or hint overlay."""
         if self._text_lines:
             self._text_lines[0].text = prev_text
             self._text_lines[1].text = current_text
             self._text_lines[2].text = next_text
-        elif self._text_area is not None:
-            self._text_area.text = current_text
+        else:
+            # Delegate to set_text which handles lazy overlay creation
+            self.set_text(current_text)
 
     def set_text(self, text):
         """Update text on any display.
@@ -263,6 +264,9 @@ class DisplayManager:
         # Re-add highlight overlay if it existed
         if self._highlight is not None:
             self._splash.append(self._highlight)
+        # Re-add text overlay if it existed
+        if self._text_area is not None:
+            self._splash.append(self._text_area)
         print("Background loaded")
 
     def set_background(self, image_path):
