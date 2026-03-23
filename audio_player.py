@@ -90,12 +90,12 @@ class AudioPlayer:
         )
 
     def play(self, sound_file):
-        """Play an MP3 file. Blocks until playback finishes.
+        """Play an MP3 or WAV file. Blocks until playback finishes.
 
         Checks SD card first via StorageManager, falls back to flash.
 
         Args:
-            sound_file: Path to the MP3 file.
+            sound_file: Path to the sound file (.mp3 or .wav).
         """
         # Resolve path: SD card first, then flash
         if self._storage:
@@ -105,13 +105,19 @@ class AudioPlayer:
         f = None
         try:
             f = open(sound_file, "rb")
-            mp3 = audiomp3.MP3Decoder(f)
-            native_rate = mp3.sample_rate
+
+            if sound_file.lower().endswith(".wav"):
+                import audiocore
+                source = audiocore.WaveFile(f)
+                native_rate = source.sample_rate
+            else:
+                source = audiomp3.MP3Decoder(f)
+                native_rate = source.sample_rate
 
             # Adjust sample rate for playback speed
             target_rate = int(native_rate * self._playback_speed / 100)
             if target_rate != native_rate:
-                mp3.sample_rate = target_rate
+                source.sample_rate = target_rate
                 print("Audio: rate={} -> {} ({}%)".format(
                     native_rate, target_rate, self._playback_speed))
             else:
@@ -127,7 +133,8 @@ class AudioPlayer:
                     self._codec.mute(False)
                     self._current_rate = target_rate
 
-            self._audio.play(mp3)
+            time.sleep(0.1)  # Dead time before play (some DACs need settling)
+            self._audio.play(source)
             while self._audio.playing:
                 time.sleep(0.01)
             print("Audio: done")

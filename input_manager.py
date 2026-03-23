@@ -29,6 +29,7 @@ class InputManager:
         """
         self._config = config
         self._display = display_manager
+        self._i2c = i2c
         self._debounce_time = config.get("debounce_time", 0.5)
         self._last_press_time = 0  # Global debounce for ALL inputs
         self._debug = True
@@ -101,8 +102,14 @@ class InputManager:
         print("Touch controller ready")
 
     def _init_buttons(self, config):
-        """Initialize hardware button decoder (3-bit binary + interrupt + latch)."""
-        # Data pins (bit 0, 1, 2)
+        """Initialize hardware buttons (binary decoder or I2C expander)."""
+        button_type = config.get("button_type", "decoder")
+
+        if button_type == "i2c_expander":
+            self._init_i2c_expander_buttons(config)
+            return
+
+        # Binary decoder: data pins + interrupt + latch
         for pin_name in config.get("button_data_pins", []):
             pin = digitalio.DigitalInOut(_pin(pin_name))
             pin.direction = digitalio.Direction.INPUT
@@ -122,6 +129,42 @@ class InputManager:
             self._button_latch = digitalio.DigitalInOut(latch_pin)
             self._button_latch.direction = digitalio.Direction.OUTPUT
             self._button_latch.value = False
+
+    def _init_i2c_expander_buttons(self, config):
+        """Initialize buttons via PCA9555 I2C expanders."""
+        from i2c_expanders.PCA9555 import PCA9555
+
+        i2c = self._i2c if self._i2c else board.I2C()
+        addresses = config.get("i2c_expander_addresses", [])
+        pin_nums = config.get("i2c_expander_pins", [4, 5, 6, 7])
+
+        self._expander_pins = []
+        for addr in addresses:
+            try:
+                dev = PCA9555(i2c, address=addr)
+                for p in pin_nums:
+                    pin = dev.get_pin(p)
+                    pin.switch_to_input(invert_polarity=True)
+                    self._expander_pins.append(pin)
+            except Exception as e:
+                print("I2C expander 0x{:02x} error: {}".format(addr, e))
+
+        # Interrupt pin (active low)
+        int_pin = _pin(config.get("button_int_pin"))
+        if int_pin:
+            self._button_int = digitalio.DigitalInOut(int_pin)
+            self._button_int.direction = digitalio.Direction.INPUT
+            self._button_int.pull = digitalio.Pull.UP
+
+        # Latch reset pin
+        latch_pin = _pin(config.get("button_latch_reset_pin"))
+        if latch_pin:
+            self._button_latch = digitalio.DigitalInOut(latch_pin)
+            self._button_latch.direction = digitalio.Direction.OUTPUT
+            self._button_latch.value = True
+
+        self._button_type = "i2c_expander"
+        print("I2C expander buttons: {} pins".format(len(self._expander_pins)))
 
     def _init_direct_buttons(self, config):
         """Initialize individual GPIO buttons (active low with pull-up)."""
@@ -234,7 +277,10 @@ class InputManager:
         return sx, sy
 
     def _check_buttons(self):
-        """Poll hardware button decoder. Returns button index or None."""
+        """Poll hardware buttons (decoder or I2C expander)."""
+        if hasattr(self, '_button_type') and self._button_type == "i2c_expander":
+            return self._check_i2c_expander_buttons()
+
         if self._button_int is None:
             return None
         if not self._button_int.value:
@@ -255,6 +301,26 @@ class InputManager:
             self._button_latch.value = False
 
         return button_number
+
+    def _check_i2c_expander_buttons(self):
+        """Poll PCA9555 I2C expander pins. Returns button index or None.
+
+        Pressed = pin.value False (active low even with invert_polarity).
+        Matches V1 behavior: `if (not pin.value): button_pressed(i)`
+        """
+        if not hasattr(self, '_expander_pins'):
+            return None
+
+        for i, pin in enumerate(self._expander_pins):
+            if not pin.value:  # False = pressed
+                print("I2C button:", i)
+                # Reset latch
+                if self._button_latch:
+                    self._button_latch.value = False
+                    time.sleep(0.01)
+                    self._button_latch.value = True
+                return i
+        return None
 
     def _check_direct_buttons(self):
         """Poll direct GPIO buttons. Returns button index or None."""

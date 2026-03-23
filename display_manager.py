@@ -56,6 +56,10 @@ class DisplayManager:
         self._splash = displayio.Group()
         self._display.root_group = self._splash
 
+        # Selection highlight overlay
+        self._highlight = None
+        self._highlight_index = -1
+
         if self._text_mode:
             self._init_text_display()
         else:
@@ -65,10 +69,6 @@ class DisplayManager:
                     self._load_background(bg)
                 except Exception as e:
                     print("Initial background skipped:", e)
-
-        # Selection highlight overlay
-        self._highlight = None
-        self._highlight_index = -1
 
     def _init_ssd1306(self, config):
         """Initialize SSD1306 OLED via I2C."""
@@ -254,12 +254,13 @@ class DisplayManager:
         """Load and display a BMP background image."""
         import gc
         print("Loading background:", image_path)
-        # Clear existing content
-        while len(self._splash):
-            self._splash.pop()
+        # Load first — don't clear until we know it works
         gc.collect()
         odb = displayio.OnDiskBitmap(image_path)
         face = displayio.TileGrid(odb, pixel_shader=odb.pixel_shader)
+        # Success — now clear and swap
+        while len(self._splash):
+            self._splash.pop()
         self._splash.append(face)
         # Re-add highlight overlay if it existed
         if self._highlight is not None:

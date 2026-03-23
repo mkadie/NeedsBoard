@@ -345,6 +345,109 @@ VARIANTS = {
         "sleep_mode": "light",
         "sleep_wake_pins": [],
     },
+
+    "FEATHER_RP2350_V1": {
+        "name": "FEATHER_RP2350_V1",
+
+        # Display — ILI9341 320x240 SPI
+        "display_type": "ILI9341",
+        "screen_width": 320,
+        "screen_height": 240,
+        "display_rotation": 180,
+        "display_inverted": False,
+        "background_image": "/lcd_images/0_needs_small_unc.bmp",
+        "lcd_cs": "D10",
+        "lcd_dc": "TX",
+        "lcd_sclk": "SCK",
+        "lcd_mosi": "MOSI",
+        "lcd_miso": "MISO",
+        "lcd_backlight": None,
+        "lcd_reset": "A0",
+        "spi_baudrate": None,
+
+        # Sprite sheet for fast menu switching
+        "sprite_sheet": "/lcd_images/needs.bmp",
+        "sprite_tile_width": 320,
+        "sprite_tile_height": 200,
+        "sprite_default_tile": 8,
+
+        # Audio — direct I2S
+        "sound_system": "I2S_DIRECT",
+        "codec_sample_rate": 22050,
+        "i2s_bclk": "A1",
+        "i2s_ws": "A2",
+        "i2s_dout": "A3",
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # No FULL_POWER pin
+        "full_power_pin": None,
+
+        # SD Card — shares SPI bus
+        "sd_card": True,
+        "sd_cs": "RX",
+        "sd_sclk": "SCK",
+        "sd_mosi": "MOSI",
+        "sd_miso": "MISO",
+        "sd_shares_display_spi": True,
+
+        # I2C (PCA9555 expanders, EEPROM)
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        # Touch screen — none
+        "touch_screen": False,
+
+        # Physical buttons — 8 via dual PCA9555 I2C expanders
+        "max_buttons": 8,
+        "button_type": "i2c_expander",
+        "i2c_expander_addresses": [0x20, 0x24],
+        "i2c_expander_pins": [4, 5, 6, 7],  # Pins on each expander
+        "button_int_pin": "D25",
+        "button_latch_reset_pin": "D24",
+
+        # Rotary encoder
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "D6",
+        "encoder_pin_b": "D5",
+        "encoder_button_pin": "D9",
+        "encoder_button_index": 0,
+
+        # Wake / extra button
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+
+        # NeoPixel — 32 LEDs (4 per button)
+        "neopixel_pin": "D13",
+        "neopixel_count": 32,
+        "neopixel_per_button": 4,
+
+        # Vibration motor
+        "vibration_pin": None,  # TODO: wire up vibration motor pin
+        "vibration_enabled": True,
+
+        # Button grid layout — 4x2
+        "button_cols": 4,
+        "button_rows": 2,
+
+        # Defaults (overridable in config.txt)
+        "debounce_time": 0.5,
+        "start_menu": "base.menu",
+        "volume": 80,
+        "emergency_push_enabled": True,
+        "emergency_push_sound": "/button_sounds/emergency.mp3",
+        "emergency_hold_enabled": True,
+        "emergency_hold_seconds": 3,
+        "sleep_enabled": True,
+        "sleep_timeout": 120,
+
+        # Hardware-specific sleep settings
+        "sleep_mode": "light",
+        "sleep_wake_pins": [],
+    },
 }
 
 # Change this single line to switch machine variant

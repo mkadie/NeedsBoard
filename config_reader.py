@@ -56,6 +56,7 @@ def apply_config(hw_config, user_config):
         "playback_speed",
         "debounce_time",
         "encoder_direction_flip",
+        "encoder_navigation",
         "play_on_release",
         "show_border",
         "display_hint_text",
