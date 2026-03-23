@@ -122,6 +122,7 @@ class Machine:
             pixel=self._pixel,
             menus_dir=menus_dir,
             storage=self.storage,
+            config=self._config,
         )
 
         # Sleep / power management
@@ -379,7 +380,15 @@ class Machine:
                 self.input._encoder.position = 0
                 self.input._last_encoder_pos = 0
         self._last_shown_index = -1  # Force text refresh
+        # Force full text update for new menu
+        self._last_shown_index = -1
         self._update_text_for_index(0)
+        self._last_shown_index = 0
+        # Force display refresh
+        try:
+            self.display.display.refresh()
+        except:
+            pass
 
     def _handle_press(self, button_index):
         """Handle a button press — dispatch to menu or legacy mode."""
@@ -417,10 +426,12 @@ class Machine:
             self._update_display()
             return
 
-        # Keep image visible for at least 3 seconds
-        elapsed = time.monotonic() - press_start
-        if elapsed < 3 and item.get("image"):
-            time.sleep(3 - elapsed)
+        # Keep zoom image visible for at least 3 seconds (only if zoom shown)
+        has_nav = "submenu" in item or "list" in item or "back" in item
+        if not has_nav and item.get("image") and self.action._zoom_enabled:
+            elapsed = time.monotonic() - press_start
+            if elapsed < 3:
+                time.sleep(3 - elapsed)
 
         self.set_status("ready")
 
@@ -439,8 +450,11 @@ class Machine:
         if nav == "back":
             if self._menu_stack.back():
                 self._build_grid()
+                self.display.restore_background()
                 self._update_display()
                 self._reset_selection()
+                if self._has_encoder_nav:
+                    self.display.set_highlight(self.input.selected_index)
                 print("Back to:", self._menu_stack.name)
             else:
                 print("Already at root menu")
@@ -449,8 +463,11 @@ class Machine:
             try:
                 self._menu_stack.navigate(menu_file)
                 self._build_grid()
+                self.display.restore_background()
                 self._update_display()
                 self._reset_selection()
+                if self._has_encoder_nav:
+                    self.display.set_highlight(self.input.selected_index)
                 print("Navigated to:", self._menu_stack.name)
             except Exception as e:
                 print("Navigation error:", e)

@@ -60,6 +60,7 @@ def apply_config(hw_config, user_config):
         "play_on_release",
         "show_border",
         "display_hint_text",
+        "zoom_image_enabled",
         "start_menu",
         "emergency_push_enabled",
         "emergency_push_sound",

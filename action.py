@@ -46,7 +46,7 @@ class Action:
     """
 
     def __init__(self, audio=None, display=None, pixel=None,
-                 menus_dir="/menus", storage=None):
+                 menus_dir="/menus", storage=None, config=None):
         """Set up action executor with hardware references.
 
         Args:
@@ -61,6 +61,7 @@ class Action:
         self._pixel = pixel
         self._menus_dir = menus_dir
         self._storage = storage
+        self._zoom_enabled = config.get("zoom_image_enabled", False) if config else False
 
     def execute(self, item):
         """Execute all actions defined in a press item dict.
@@ -158,11 +159,16 @@ class Action:
         self._pixel[0] = color
 
     def _do_image(self, item):
-        """Display an image during the action (zoom view).
+        """Display a zoom image during playback if enabled.
 
-        Shows the item's image full-screen. The caller is responsible
-        for restoring the menu background after playback.
+        Skipped for navigation items (submenu/back) and when
+        zoom_image_enabled is false in config.
         """
+        if not self._zoom_enabled:
+            return
+        # Don't zoom for navigation items
+        if "submenu" in item or "list" in item or "back" in item:
+            return
         image_path = item.get("image")
         if not image_path or not self._display:
             return
