@@ -402,8 +402,11 @@ class Machine:
         # Show the pressed item's text on screen
         text = item.get("text_description", item.get("label", ""))
         self.display.set_text(text)
+        # Hide highlight during image/sound playback
+        self.display.set_highlight(-1)
         self.set_status("playing")
 
+        press_start = time.monotonic()
         try:
             nav = self.action.execute(item)
         except Exception as e:
@@ -411,12 +414,27 @@ class Machine:
             self.set_status("error")
             time.sleep(0.5)
             self.set_status("ready")
+            self._update_display()
             return
+
+        # Keep image visible for at least 3 seconds
+        elapsed = time.monotonic() - press_start
+        if elapsed < 3 and item.get("image"):
+            time.sleep(3 - elapsed)
 
         self.set_status("ready")
 
+        # Reset button latch after playback (V1 pattern)
+        if hasattr(self.input, 'reset_button_latch'):
+            self.input.reset_button_latch()
+
         # Handle navigation
         if nav is None:
+            # Restore menu background after zoom image
+            self.display.restore_background()
+            # Restore highlight
+            if self._has_encoder_nav:
+                self.display.set_highlight(self.input.selected_index)
             return
         if nav == "back":
             if self._menu_stack.back():
@@ -453,13 +471,25 @@ class Machine:
         return path
 
     def _update_display(self):
-        """Update the display background for the current menu."""
+        """Update the display background for the current menu.
+
+        Stores the last working background path so it can be restored
+        after zoom images without re-parsing the menu header.
+        """
         bg = self._menu_stack.header.get("background")
         if bg:
+            resolved = self._resolve_path(bg)
             try:
-                self.display.set_background(self._resolve_path(bg))
+                self.display.set_background(resolved)
+                self._current_bg = resolved  # Remember working path
             except Exception as e:
                 print("Background load error:", e)
+                # Try the stored fallback
+                if hasattr(self, '_current_bg') and self._current_bg:
+                    try:
+                        self.display.set_background(self._current_bg)
+                    except:
+                        pass
 
     def _play_legacy(self, button_index):
         """Legacy mode: play sound by index from button_config."""

@@ -254,7 +254,6 @@ class DisplayManager:
         """Load and display a BMP background image."""
         import gc
         print("Loading background:", image_path)
-        # Load first — don't clear until we know it works
         gc.collect()
         odb = displayio.OnDiskBitmap(image_path)
         face = displayio.TileGrid(odb, pixel_shader=odb.pixel_shader)
@@ -268,6 +267,9 @@ class DisplayManager:
         # Re-add text overlay if it existed
         if self._text_area is not None:
             self._splash.append(self._text_area)
+        # Store as the menu background for restore_background()
+        self._menu_bg_face = face
+        self._menu_bg_odb = odb  # Keep reference so GC doesn't free it
         print("Background loaded")
 
     def set_background(self, image_path):
@@ -275,6 +277,43 @@ class DisplayManager:
         if self._text_mode:
             return
         self._load_background(image_path)
+
+    def show_image(self, image_path):
+        """Show a temporary full-screen image (zoom view).
+
+        Call restore_background() to return to the menu background.
+        """
+        if self._text_mode:
+            return
+        import gc
+        gc.collect()
+        try:
+            odb = displayio.OnDiskBitmap(image_path)
+            face = displayio.TileGrid(odb, pixel_shader=odb.pixel_shader)
+            while len(self._splash):
+                self._splash.pop()
+            self._splash.append(face)
+            self._temp_odb = odb  # Keep reference
+        except Exception as e:
+            print("show_image error:", e)
+
+    def restore_background(self):
+        """Restore the menu background after a temporary image."""
+        if self._text_mode:
+            return
+        if not hasattr(self, '_menu_bg_face') or self._menu_bg_face is None:
+            return
+        while len(self._splash):
+            self._splash.pop()
+        self._splash.append(self._menu_bg_face)
+        if self._highlight is not None:
+            self._splash.append(self._highlight)
+        if self._text_area is not None:
+            self._splash.append(self._text_area)
+        # Free temp image
+        self._temp_odb = None
+        import gc
+        gc.collect()
 
     def _create_highlight(self):
         """Create a border-only highlight rectangle for cell selection."""

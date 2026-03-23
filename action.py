@@ -158,18 +158,21 @@ class Action:
         self._pixel[0] = color
 
     def _do_image(self, item):
-        """Display an image if specified.
+        """Display an image during the action (zoom view).
 
-        TODO: Implement image overlay on display.
-        Currently the display shows the background grid image.
-        Per-press image display needs display_manager support
-        for overlaying images on top of the grid.
+        Shows the item's image full-screen. The caller is responsible
+        for restoring the menu background after playback.
         """
         image_path = item.get("image")
-        if not image_path:
+        if not image_path or not self._display:
             return
-        # Placeholder — needs DisplayManager overlay support
-        print("Action: image:", image_path)
+
+        resolved = self._resolve_path(image_path)
+        print("Action: image:", resolved)
+        try:
+            self._display.show_image(resolved)
+        except Exception as e:
+            print("Action: image error:", e)
 
     def _do_text(self, item):
         """Display text on screen if specified.

@@ -305,22 +305,34 @@ class InputManager:
     def _check_i2c_expander_buttons(self):
         """Poll PCA9555 I2C expander pins. Returns button index or None.
 
-        Pressed = pin.value False (active low even with invert_polarity).
-        Matches V1 behavior: `if (not pin.value): button_pressed(i)`
+        Edge-detects on press (False→True transition after invert).
+        Only fires once per press, must release before firing again.
         """
         if not hasattr(self, '_expander_pins'):
             return None
 
+        if not hasattr(self, '_expander_last'):
+            self._expander_last = [True] * len(self._expander_pins)
+
         for i, pin in enumerate(self._expander_pins):
-            if not pin.value:  # False = pressed
+            current = pin.value  # True = idle, False = pressed
+            was = self._expander_last[i]
+            self._expander_last[i] = current
+            if not current and was:  # Falling edge = new press
                 print("I2C button:", i)
-                # Reset latch
-                if self._button_latch:
-                    self._button_latch.value = False
-                    time.sleep(0.01)
-                    self._button_latch.value = True
                 return i
         return None
+
+    def reset_button_latch(self):
+        """Reset the button latch after handling a press.
+
+        Call this after the action (sound playback) finishes,
+        matching V1's pattern of resetting after playback completes.
+        """
+        if self._button_latch:
+            self._button_latch.value = False
+            time.sleep(0.1)
+            self._button_latch.value = True
 
     def _check_direct_buttons(self):
         """Poll direct GPIO buttons. Returns button index or None."""
