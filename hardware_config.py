@@ -12,7 +12,7 @@ VARIANTS = {
         "display_type": "ILI9341",
         "screen_width": 320,
         "screen_height": 240,
-        "display_rotation": 0,
+        "display_rotation": 180,
         "display_inverted": True,  # IPS panel needs INVON (0x21)
         "background_image": "/needs_small.bmp",
         "lcd_cs": "GPIO10",
@@ -53,8 +53,8 @@ VARIANTS = {
         "touch_rst": "GPIO18",
         "touch_int": "GPIO17",
         "touch_swap_xy": True,
-        "touch_flip_x": False,
-        "touch_flip_y": True,
+        "touch_flip_x": True,
+        "touch_flip_y": False,
 
         # Physical buttons
         "max_buttons": 0,
