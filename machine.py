@@ -304,13 +304,22 @@ class Machine:
             self.display.set_highlight(self.input.selected_index)
             self._update_text_for_index(self.input.selected_index)
 
+        wake_grace = self._config.get("wake_ignore_seconds", 1.0)
+        wake_until = 0
+
         while True:
             button = self.input.poll()
             if button is not None:
                 self.sleep.activity()
-                self._handle_press(button)
+                # Ignore input during wake grace period (prevents
+                # the touch that woke the screen from triggering a button)
+                if time.monotonic() >= wake_until:
+                    self._handle_press(button)
             else:
-                self.sleep.check()
+                woke = self.sleep.check()
+                if woke:
+                    wake_until = time.monotonic() + wake_grace
+                    print("Wake grace: ignoring input for {}s".format(wake_grace))
             # Check for emergency long-press
             if self._emergency_hold_enabled:
                 self._check_emergency_hold()

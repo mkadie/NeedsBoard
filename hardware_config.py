@@ -93,6 +93,7 @@ VARIANTS = {
         "sleep_timeout": 120,
         "sleep_mode": "light",
         "sleep_wake_pins": ["GPIO0", "GPIO17"],
+        "wake_ignore_seconds": 1.0,  # Grace period — instant wake needs this
     },
 
     "RP2350_V2": {
