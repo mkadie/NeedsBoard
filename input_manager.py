@@ -397,16 +397,32 @@ class InputManager:
         if self._encoder is None:
             return None
 
-        # Update software encoder position from pin polling
+        # Update software encoder — lookup table approach
+        # Tracks all 4 state transitions, only counts valid sequences
         if self._software_encoder:
             a = self._enc_a.value
             b = self._enc_b.value
-            if a != self._enc_last_a:  # A changed
-                # CW: A leads B, CCW: B leads A
-                if a != b:
-                    self._encoder.position += 1
+            state = (a << 1) | b
+            last_state = (self._enc_last_a << 1) | self._enc_last_b
+            if state != last_state:
+                # Lookup table: [last_state][state] -> direction
+                # 0=invalid/bounce, 1=CW, -1=CCW
+                if not hasattr(self, '_enc_table'):
+                    self._enc_table = {
+                        (0,1): 1, (1,3): 1, (3,2): 1, (2,0): 1,   # CW
+                        (0,2):-1, (2,3):-1, (3,1):-1, (1,0):-1,   # CCW
+                    }
+                    self._enc_count = 0
+                direction = self._enc_table.get((last_state, state), 0)
+                if direction != 0:
+                    self._enc_count += direction
+                    # Only commit after 2 valid steps in same direction
+                    # (full detent = 2 or 4 edges depending on encoder)
+                    if abs(self._enc_count) >= 2:
+                        self._encoder.position += 1 if self._enc_count > 0 else -1
+                        self._enc_count = 0
                 else:
-                    self._encoder.position -= 1
+                    self._enc_count = 0  # Invalid transition = bounce, reset
                 self._enc_last_a = a
                 self._enc_last_b = b
 

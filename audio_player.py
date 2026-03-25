@@ -137,6 +137,8 @@ class AudioPlayer:
             self._audio.play(source)
             while self._audio.playing:
                 time.sleep(0.01)
+            time.sleep(0.05)  # Let last buffer drain
+            self._audio.stop()
             print("Audio: done")
         except Exception as e:
             print("Audio: ERROR:", e)
