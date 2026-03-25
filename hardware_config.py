@@ -58,7 +58,16 @@ VARIANTS = {
 
         # Physical buttons
         "max_buttons": 0,
+
+        # Rotary encoder — optional, on expansion port
+        # IO2=A, IO3=B, IO14=button, IO21=GND (driven low)
         "rotary_encoder": False,
+        "encoder_navigation": False,
+        "encoder_pin_a": "GPIO2",
+        "encoder_pin_b": "GPIO3",
+        "encoder_button_pin": "GPIO14",
+        "encoder_button_index": 0,
+        "encoder_gnd_pin": "GPIO21",  # Drive low as ground for encoder
 
         # Wake / extra button
         "wake_button_pin": "GPIO0",
