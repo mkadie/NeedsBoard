@@ -92,7 +92,7 @@ VARIANTS = {
         "sleep_enabled": True,
         "sleep_timeout": 120,
         "sleep_mode": "light",
-        "sleep_wake_pins": ["GPIO0", "GPIO17"],
+        "sleep_wake_pins": ["GPIO0", "GPIO17", "GPIO14"],
         "wake_ignore_seconds": 1.0,  # Grace period — instant wake needs this
     },
 

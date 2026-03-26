@@ -1,0 +1,195 @@
+# AAC Device — Setup Guide
+
+Step-by-step instructions for setting up a new AAC communication device.
+
+## What You Need
+
+- AAC device (CYD_PLUS, Fruit Jam, OLED Badge, or Feather RP2350)
+- USB cable (USB-C or Micro-USB depending on the device)
+- Computer (Windows, Mac, or Linux)
+
+## Step 1: Install CircuitPython
+
+### CYD_PLUS (ESP32-S3)
+
+**CircuitPython 10.1.4** — Board: `yd_esp32_s3_n16r8`
+
+> **Note:** Do not use CircuitPython 10.1 on older CYD boards that were running 9.x.
+> The 10.1 branch has known issues on some configurations.
+
+1. Download the firmware:
+   - Go to https://circuitpython.org/board/yd_esp32_s3_n16r8/
+   - Download the `.bin` file for version **10.1.4**
+
+2. Put the device in bootloader mode:
+   - Hold the **BOOT** button while plugging in USB
+   - The device shows up as a serial/JTAG device (not a drive)
+
+3. Flash the firmware:
+   ```bash
+   pip install esptool
+   esptool -p /dev/ttyACM0 --chip esp32s3 write-flash 0x0 adafruit-circuitpython-yd_esp32_s3_n16r8-en_US-10.1.4.bin
+   ```
+   On Windows, replace `/dev/ttyACM0` with `COM3` (or whichever port appears).
+
+4. Unplug and replug the device (without holding any buttons).
+
+5. A **CIRCUITPY** drive should appear on your computer.
+
+### Fruit Jam (RP2350)
+
+**CircuitPython 10.1.4** — Board: `adafruit_fruit_jam`
+
+1. Download the `.uf2` file from https://circuitpython.org/board/adafruit_fruit_jam/
+2. Hold BOOT button while plugging in USB — a **RPI-RP2** drive appears
+3. Drag the `.uf2` file onto the drive
+4. The device reboots and **CIRCUITPY** appears
+
+### OLED Badge (Pico 2)
+
+**CircuitPython 9.2.9** — Board: `raspberry_pi_pico2`
+
+1. Download the `.uf2` file from https://circuitpython.org/board/raspberry_pi_pico2/
+2. Hold BOOTSEL button while plugging in USB — a **RPI-RP2** drive appears
+3. Drag the `.uf2` file onto the drive
+4. **CIRCUITPY** appears
+
+## Step 2: Install Libraries
+
+The device needs CircuitPython libraries to work. Download the library bundle
+that matches your CircuitPython version from https://circuitpython.org/libraries.
+
+Copy these libraries to the `CIRCUITPY/lib/` folder:
+
+### All Devices
+- `neopixel.mpy` (if device has NeoPixels)
+- `adafruit_bus_device/` (folder)
+- `adafruit_register/` (folder)
+- `adafruit_display_text/` (folder — for hint text overlay)
+
+### CYD_PLUS (touch screen)
+- `adafruit_focaltouch.mpy`
+- `adafruit_ili9341.mpy`
+
+### Fruit Jam
+- `adafruit_fruitjam/` (folder)
+- `adafruit_tlv320.mpy`
+- `adafruit_st7735r.mpy`
+
+### OLED Badge
+- `adafruit_displayio_ssd1306.mpy`
+
+### Feather RP2350 (Moana's device)
+- `adafruit_ili9341.mpy`
+- `i2c_expanders/` (folder)
+
+## Step 3: Copy the Software
+
+Copy all `.py` files from the `cyd_plus/` project directory to the **CIRCUITPY** drive:
+
+```
+code.py
+machine.py
+hardware_config.py
+display_manager.py
+audio_player.py
+input_manager.py
+sleep_manager.py
+menu_parser.py
+action.py
+storage_manager.py
+config_reader.py
+```
+
+Or use the deploy script:
+```bash
+cd cyd_plus
+./deploy.sh
+```
+
+## Step 4: Set the Device Variant
+
+Edit `hardware_config.py` on the CIRCUITPY drive. Find the last line:
+
+```python
+DEFAULT_VARIANT = "FRUITJAM_V2"
+```
+
+Change it to match your device:
+
+| Device | Variant Name |
+|--------|-------------|
+| CYD_PLUS (touch screen) | `CYD_PLUS` |
+| Fruit Jam (color LCD + encoder) | `FRUITJAM_V2` |
+| OLED Badge (small mono screen) | `RP2350_OLED_BADGE_V3` |
+| Feather RP2350 (Moana's device) | `FEATHER_RP2350_V1` |
+
+## Step 5: Copy Menus and Sounds
+
+Create the `menus/` folder on CIRCUITPY and copy menu files:
+
+```
+CIRCUITPY/
+    menus/
+        base.menu
+        food.menu
+        (or base_fruitjam.menu for smaller screens)
+    button_sounds/
+        thirsty.mp3
+        hungry.mp3
+        bathroom.mp3
+        ... (all your sound files)
+    needs_small.bmp    (background image for 4x2 devices)
+```
+
+## Step 6: Create config.txt
+
+Create a `config.txt` file on the CIRCUITPY drive:
+
+```
+# Basic configuration
+sleep_enabled = true
+sleep_timeout = 120
+volume = 80
+start_menu = base.menu
+emergency_push_enabled = true
+emergency_push_sound = /button_sounds/emergency.mp3
+```
+
+See the [Guide for Teachers](GUIDE_FOR_TEACHERS.md) for all available settings.
+
+## Step 7: Test
+
+1. Safely eject the CIRCUITPY drive
+2. The device restarts automatically
+3. You should see the menu appear on screen within 5 seconds
+4. Touch a button (or rotate the encoder) to test
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| CIRCUITPY drive doesn't appear | Reflash CircuitPython (Step 1) |
+| Device shows Python error on serial | Check that all `.py` files are copied |
+| "Unknown variant" error | Check `DEFAULT_VARIANT` in hardware_config.py |
+| No sound | Check sound files exist in button_sounds/ |
+| Touch doesn't respond | Check `adafruit_focaltouch.mpy` is in lib/ |
+| Screen is blank | Check display libraries are in lib/ |
+
+## Quick Deploy Script
+
+For subsequent updates, use the deploy script from your computer:
+
+```bash
+cd cyd_plus
+./deploy.sh              # Deploy to all connected devices
+./deploy.sh --code-only  # Update only Python files (keep config)
+```
+
+## Version Info
+
+| Component | Version |
+|-----------|---------|
+| CircuitPython (CYD/Fruit Jam) | 10.1.4 |
+| CircuitPython (Badge/Feather) | 9.2.x |
+| Software | See `git log` for latest |

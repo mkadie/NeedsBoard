@@ -1,5 +1,14 @@
 # Development Notes & Future Considerations
 
+## CircuitPython Version Notes
+
+- CYD_PLUS and Fruit Jam use **CircuitPython 10.1.4** (10.x branch)
+- OLED Badge (Pico 2) uses **CircuitPython 9.2.9**
+- Feather RP2350 uses **CircuitPython 9.2.6**
+- The 10.1 branch was reported as not working 100% on some configurations — test thoroughly before upgrading existing devices
+- Board ID for CYD_PLUS: `yd_esp32_s3_n16r8`
+- Flash command: `esptool -p /dev/ttyACMx --chip esp32s3 write-flash 0x0 <firmware>.bin`
+
 ## Pocket Activation / Accidental Presses
 
 The device can be triggered accidentally when carried in a pocket or bag. Consider:
