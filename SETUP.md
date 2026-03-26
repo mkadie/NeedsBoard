@@ -126,21 +126,60 @@ Change it to match your device:
 
 ## Step 5: Copy Menus and Sounds
 
-Create the `menus/` folder on CIRCUITPY and copy menu files:
+Create the folder structure on CIRCUITPY and copy all content files:
 
 ```
 CIRCUITPY/
     menus/
-        base.menu
-        food.menu
-        (or base_fruitjam.menu for smaller screens)
-    button_sounds/
+        base.menu               ← Main menu (4x2)
+        food.menu               ← Food submenu (4x2)
+        base_fruitjam.menu      ← Main menu (3x2, smaller screens)
+        food_fruitjam.menu      ← Food submenu (3x2)
+        images/                 ← Button images for base menu
+            thirsty.bmp
+            hungry.bmp
+            more.bmp
+            bathroom.bmp
+            stinky.bmp
+            yes.bmp
+            no.bmp
+            please.bmp
+            food/               ← Button images for food menu
+                food_board.bmp
+                water.bmp
+                juice.bmp
+                apple.bmp
+                milk.bmp
+                banana.bmp
+                cracker.bmp
+                yogurt.bmp
+                back.bmp
+        sounds/
+            food/               ← Sound files for food menu
+                water.mp3
+                juice.mp3
+                apple.mp3
+                milk.mp3
+                banana.mp3
+                cracker.mp3
+                yogurt.mp3
+    button_sounds/              ← Sound files for base menu
         thirsty.mp3
         hungry.mp3
         bathroom.mp3
-        ... (all your sound files)
-    needs_small.bmp    (background image for 4x2 devices)
+        stinky.mp3
+        yes.mp3
+        no.mp3
+        please.mp3
+        more.mp3
+        read.mp3
+        emergency.mp3
+    needs_small.bmp             ← Background image (4x2 grid)
 ```
+
+**Important:** Both images AND sounds must be present, or buttons will
+show errors. The food submenu sounds are in `menus/sounds/food/`, not
+in `button_sounds/`.
 
 ## Step 6: Create config.txt
 

@@ -72,6 +72,26 @@ The device can be triggered accidentally when carried in a pocket or bag. Consid
 - Each device needs its own config.txt with the right flip setting
 - Consider auto-calibrating: on first boot, show "turn right" prompt
 
+## Deployment Checklist for New Devices
+
+**Common mistake:** Deploying Python code but forgetting content files.
+The device needs ALL of these to work properly:
+
+- [ ] CircuitPython firmware (correct version for the board)
+- [ ] CircuitPython libraries in `lib/` (device-specific, see SETUP.md)
+- [ ] All `.py` production code files
+- [ ] `hardware_config.py` with correct `DEFAULT_VARIANT`
+- [ ] `config.txt` with device-appropriate settings
+- [ ] `needs_small.bmp` background image (4x2 grid devices)
+- [ ] `menus/*.menu` files
+- [ ] `menus/images/*.bmp` — base menu button images
+- [ ] `menus/images/food/*.bmp` — food menu images + board
+- [ ] `menus/sounds/food/*.mp3` — food menu sound files
+- [ ] `button_sounds/*.mp3` — base menu sound files + emergency.mp3
+
+**Note:** Food sounds are in `menus/sounds/food/`, NOT in `button_sounds/`.
+This is a common source of "no sound on food menu" bugs.
+
 ## Testing Checklist for New Devices
 
 1. Verify serial port detection (udevadm info)
@@ -82,5 +102,6 @@ The device can be triggered accidentally when carried in a pocket or bag. Consid
 6. Test emergency hold (hold button 3s while active)
 7. Test sleep/wake cycle
 8. Test submenu navigation and back
-9. Verify all sound files present
-10. Check text_description display on OLED / hint text on color
+9. Verify all sound files present (base AND food menus)
+10. Verify all image files present (base AND food menus)
+11. Check text_description display on OLED / hint text on color
