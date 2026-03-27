@@ -92,6 +92,11 @@ The device needs ALL of these to work properly:
 **Note:** Food sounds are in `menus/sounds/food/`, NOT in `button_sounds/`.
 This is a common source of "no sound on food menu" bugs.
 
+**Note:** `needs_small.bmp` must be the 16-color palette BMP (mode=P) from
+the working device. The master_images version is a different image (shows
+"Talker" branding). The correct file is saved in the repo root. Do NOT
+regenerate from master_images — always copy from the repo or a working device.
+
 ## Testing Checklist for New Devices
 
 1. Verify serial port detection (udevadm info)
