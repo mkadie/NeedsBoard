@@ -1,0 +1,85 @@
+# ===================================================
+#  Food & Drink Menu
+#
+#  Reached from the "More" button on the base menu.
+#  Press Back (position 8) to return to the main menu.
+#
+#  Layout (4 columns × 2 rows):
+#
+#  +----------+----------+----------+----------+
+#  |  Water   |  Juice   |  Apple   |   Milk   |
+#  |    1     |    2     |    3     |    4     |
+#  +----------+----------+----------+----------+
+#  |  Banana  | Cracker  |  Yogurt  |  ← Back  |
+#  |    5     |    6     |    7     |    8     |
+#  +----------+----------+----------+----------+
+# ===================================================
+
+[menu]
+name = Food & Drink
+text_description = Food and drink
+type = grid
+columns = 4
+rows = 2
+back = base.menu
+background = images/food/food_board.bmp
+
+# ----- Top Row -----
+
+[water]
+label = Water
+text_description = I want water
+image = images/food/water.bmp
+sound = sounds/food/water.mp3
+position = 1
+
+[juice]
+label = Juice
+text_description = I want juice
+image = images/food/juice.bmp
+sound = sounds/food/juice.mp3
+position = 2
+
+[apple]
+label = Apple
+text_description = I want an apple
+image = images/food/apple.bmp
+sound = sounds/food/apple.mp3
+position = 3
+
+[milk]
+label = Milk
+text_description = I want milk
+image = images/food/milk.bmp
+sound = sounds/food/milk.mp3
+position = 4
+
+# ----- Bottom Row -----
+
+[banana]
+label = Banana
+text_description = I want a banana
+image = images/food/banana.bmp
+sound = sounds/food/banana.mp3
+position = 5
+
+[cracker]
+label = Cracker
+text_description = I want a cracker
+image = images/food/cracker.bmp
+sound = sounds/food/cracker.mp3
+position = 6
+
+[yogurt]
+label = Yogurt
+text_description = I want yogurt
+image = images/food/yogurt.bmp
+sound = sounds/food/yogurt.mp3
+position = 7
+
+[back_button]
+label = Back
+text_description = Back to home
+image = images/food/back.bmp
+position = 8
+back =

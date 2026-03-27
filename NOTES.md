@@ -72,6 +72,23 @@ The device can be triggered accidentally when carried in a pocket or bag. Consid
 - Each device needs its own config.txt with the right flip setting
 - Consider auto-calibrating: on first boot, show "turn right" prompt
 
+## Deployment Strategy
+
+Three ways to deploy to a new device:
+
+1. **SD Card Auto-Installer** (recommended for production)
+   - Prepare SD card with `installer/` directory once
+   - Flash CircuitPython, copy install_code.py as code.py, insert SD, reboot
+   - Installer auto-detects board and copies everything
+   - See `installer/README.md`
+
+2. **deploy.sh** (developer, USB connected)
+   - Run `./deploy.sh` from the repo on a computer
+   - Deploys to all connected CIRCUITPY drives
+
+3. **Manual copy** (one-off)
+   - Copy files individually per the checklist below
+
 ## Deployment Checklist for New Devices
 
 **Common mistake:** Deploying Python code but forgetting content files.

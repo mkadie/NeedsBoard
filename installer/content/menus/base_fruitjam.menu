@@ -1,0 +1,67 @@
+# ===================================================
+#  Base Menu — FruitJam V2 (3x2 grid)
+#
+#  Layout (3 columns × 2 rows):
+#
+#  +----------+----------+----------+
+#  | Thank You|  Stinky  |   More   |
+#  |    1     |    2     |    3     |
+#  +----------+----------+----------+
+#  | Bathroom |   Yes    |    No    |
+#  |    4     |    5     |    6     |
+#  +----------+----------+----------+
+# ===================================================
+
+[menu]
+name = Base Menu
+text_description = Basic needs
+type = grid
+columns = 3
+rows = 2
+background = images/base/base_board.bmp
+
+# ----- Top Row -----
+
+[thankyou]
+label = Thank You
+text_description = Thank you
+image = images/base/please.bmp
+sound = /button_sounds/please.mp3
+position = 1
+
+[stinky]
+label = Stinky
+text_description = You stink
+image = images/base/stinky.bmp
+sound = /button_sounds/stinky.mp3
+position = 2
+
+[more]
+label = More
+text_description = Food and drink
+image = images/base/more.bmp
+submenu = food_fruitjam.menu
+position = 3
+
+# ----- Bottom Row -----
+
+[bathroom]
+label = Bathroom
+text_description = I need the bathroom
+image = images/base/bathroom.bmp
+sound = /button_sounds/bathroom.mp3
+position = 4
+
+[yes]
+label = Yes
+text_description = Yes
+image = images/base/yes.bmp
+sound = /button_sounds/yes.mp3
+position = 5
+
+[no]
+label = No
+text_description = No
+image = images/base/no.bmp
+sound = /button_sounds/no.mp3
+position = 6

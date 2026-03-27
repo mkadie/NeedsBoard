@@ -215,9 +215,26 @@ See the [Guide for Teachers](GUIDE_FOR_TEACHERS.md) for all available settings.
 | Touch doesn't respond | Check `adafruit_focaltouch.mpy` is in lib/ |
 | Screen is blank | Check display libraries are in lib/ |
 
-## Quick Deploy Script
+## SD Card Auto-Installer (Recommended)
 
-For subsequent updates, use the deploy script from your computer:
+The easiest way to set up a new device:
+
+1. Flash CircuitPython (Step 1 above)
+2. Copy `installer/install_code.py` to the device as `code.py`
+3. Insert an SD card containing the `installer/` directory
+4. Reboot — the installer detects the board and copies everything
+5. Remove the SD card and reboot
+
+The installer automatically:
+- Identifies the board from `boot_out.txt`
+- Copies the right Python files, config, menus, images, and sounds
+- Sets the correct device variant
+
+See `installer/README.md` for details.
+
+## Quick Deploy Script (Developer)
+
+For subsequent updates from a computer:
 
 ```bash
 cd cyd_plus

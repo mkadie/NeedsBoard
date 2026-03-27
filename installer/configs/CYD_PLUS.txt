@@ -1,0 +1,11 @@
+sleep_enabled = true
+sleep_timeout = 120
+volume = 80
+playback_speed = 100
+debounce_time = 0.5
+display_hint_text = true
+start_menu = base.menu
+emergency_push_enabled = true
+emergency_push_sound = /button_sounds/emergency.mp3
+emergency_hold_enabled = true
+emergency_hold_seconds = 3
