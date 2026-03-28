@@ -9,6 +9,31 @@
 - Board ID for CYD_PLUS: `yd_esp32_s3_n16r8`
 - Flash command: `esptool -p /dev/ttyACMx --chip esp32s3 write-flash 0x0 <firmware>.bin`
 
+## Power Consumption — CYD_PLUS
+
+Measured via USB charger: **70mA constant** regardless of software state.
+
+Tested stages (all measured ~70mA):
+- Stage 1: Everything on
+- Stage 2: Backlight off (GPIO45)
+- Stage 3: + Amplifier off (GPIO1)
+- Stage 4: + MCLK off (GPIO4)
+- Stage 5: + NeoPixel off (GPIO42)
+- Stage 6: Light sleep (alarm module)
+
+**Conclusion:** The 70mA floor is the ESP32-S3 + USB charger IC + LDO regulators
+on the CYD board. Software power management cannot reduce it further while
+USB-powered. The charger IC and USB interface draw constant current.
+
+**For battery operation:** The actual savings from disabling peripherals would
+be measurable. Test with battery power (no USB) to see real sleep current.
+The ESP32-S3 light sleep should draw ~2-5mA on battery.
+
+**Recommendation:** For low-power applications, consider:
+- Hardware mod to cut USB charger IC when not charging
+- Different board without built-in charger
+- External power switch to cut total board power (like Fruit Jam's FULL_POWER)
+
 ## Pocket Activation / Accidental Presses
 
 The device can be triggered accidentally when carried in a pocket or bag. Consider:
