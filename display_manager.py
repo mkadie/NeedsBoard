@@ -382,6 +382,24 @@ class DisplayManager:
         if self._backlight:
             self._backlight.value = on
 
+    def sleep_display(self):
+        """Put the display panel into low-power sleep mode."""
+        if hasattr(self, '_display_bus'):
+            try:
+                self._display_bus.send(0x10, b"")  # SLPIN
+            except:
+                pass
+
+    def wake_display(self):
+        """Wake the display panel from sleep mode."""
+        if hasattr(self, '_display_bus'):
+            try:
+                self._display_bus.send(0x11, b"")  # SLPOUT
+                import time
+                time.sleep(0.12)  # 120ms required after SLPOUT
+            except:
+                pass
+
     @property
     def display(self):
         """The underlying displayio display object."""

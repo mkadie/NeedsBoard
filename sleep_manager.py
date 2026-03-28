@@ -276,22 +276,36 @@ class SleepManager:
 
     def _power_down(self):
         """Turn off peripherals to minimize power draw during sleep."""
+        import digitalio
+
         # Turn off NeoPixel
         if self._pixel:
             self._pixel[0] = (0, 0, 0)
 
-        # Turn off display backlight via DisplayManager
+        # Turn off display backlight and put panel to sleep
         if self._display:
             self._display.set_backlight(False)
+            self._display.sleep_display()
+            print("Sleep: display off")
 
         # Disable amplifier (save power)
         amp_pin = _pin(self._amp_en_pin_name)
         if amp_pin:
             try:
-                import digitalio
                 amp = digitalio.DigitalInOut(amp_pin)
                 amp.switch_to_output(value=self._amp_active_low)
                 amp.deinit()
+            except ValueError:
+                pass
+
+        # Stop MCLK to ES8311 codec (saves ~5-10mA)
+        mclk_pin = _pin(self._config.get("i2s_mclk"))
+        if mclk_pin:
+            try:
+                mclk = digitalio.DigitalInOut(mclk_pin)
+                mclk.switch_to_output(value=False)
+                mclk.deinit()
+                print("Sleep: MCLK stopped")
             except ValueError:
                 pass
 
@@ -302,8 +316,9 @@ class SleepManager:
 
     def _power_up(self):
         """Restore peripherals after light sleep wake."""
-        # Restore display backlight via DisplayManager
+        # Wake display panel and restore backlight
         if self._display:
+            self._display.wake_display()
             self._display.set_backlight(True)
 
         # Re-enable amplifier
