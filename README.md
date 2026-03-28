@@ -7,6 +7,18 @@ picture is pressed, the device speaks a word or phrase out loud.
 **No programming knowledge needed.** Teachers and parents customize
 the device by editing simple text files.
 
+![T-Rex Talk devices in 3D printed cases](docs/images/trex_talk_devices.jpg)
+*Four T-Rex Talk devices in custom 3D printed cases — touch screen and encoder variants*
+
+<table>
+<tr>
+<td><img src="docs/images/device_blue.jpg" width="300" alt="Blue device with buttons and LCD"><br><em>Button + LCD variant</em></td>
+<td><img src="docs/images/device_black.jpg" width="300" alt="Black device with picture buttons"><br><em>Picture button variant</em></td>
+</tr>
+</table>
+
+> **Build your own!** See the [Build-a-Box photo album](https://photos.app.goo.gl/G9FtMMnnMuZ1zZxx8) for step-by-step 3D printing and assembly photos.
+
 ## Quick Start
 
 1. **Flash CircuitPython** onto a supported device ([SETUP.md](SETUP.md))
@@ -96,6 +108,17 @@ See [help_wanted.md](help_wanted.md) for ways to contribute:
 ## License
 
 MIT License — see [LICENSE](LICENSE)
+
+## Project History
+
+This project began in the early 1990s when Michael Kadie built two speech
+boards for children with special needs.
+
+<img src="docs/images/original_speech_boards.jpg" width="300" alt="Original 1990s speech boards">
+
+*The original speech boards (1990s) — inspiration for T-Rex Talk*
+
+See [HISTORY.md](HISTORY.md) for the full version history from V0.x to V3.0.
 
 ## Credits
 
