@@ -76,9 +76,9 @@ class DisplayManager:
         import adafruit_displayio_ssd1306
 
         i2c = busio.I2C(_pin(config["i2c_scl"]), _pin(config["i2c_sda"]))
-        display_bus = I2CDisplayBus(i2c, device_address=0x3C)
+        self._display_bus = I2CDisplayBus(i2c, device_address=0x3C)
         self._display = adafruit_displayio_ssd1306.SSD1306(
-            display_bus,
+            self._display_bus,
             width=self._width,
             height=self._height,
             rotation=config.get("display_rotation", 0),
@@ -381,6 +381,40 @@ class DisplayManager:
         """Turn the display backlight on or off."""
         if self._backlight:
             self._backlight.value = on
+
+    def sleep_display(self):
+        """Put display into low-power mode.
+
+        SSD1306: DISPLAYOFF (0xAE) — drops to ~10uA
+        ILI9341/ST7735R: SLPIN (0x10) — drops to ~0.1mA
+        """
+        if not hasattr(self, '_display_bus'):
+            return
+        try:
+            if self._text_mode:
+                self._display_bus.send(0xAE, b"")  # SSD1306 DISPLAYOFF
+            else:
+                self._display_bus.send(0x10, b"")  # ILI9341 SLPIN
+        except:
+            pass
+
+    def wake_display(self):
+        """Wake display from low-power mode.
+
+        SSD1306: DISPLAYON (0xAF)
+        ILI9341/ST7735R: SLPOUT (0x11) + 120ms settle
+        """
+        if not hasattr(self, '_display_bus'):
+            return
+        try:
+            if self._text_mode:
+                self._display_bus.send(0xAF, b"")  # SSD1306 DISPLAYON
+            else:
+                self._display_bus.send(0x11, b"")  # ILI9341 SLPOUT
+                import time
+                time.sleep(0.12)
+        except:
+            pass
 
     @property
     def display(self):

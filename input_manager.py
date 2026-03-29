@@ -500,6 +500,16 @@ class InputManager:
             self._wake_button.pull = digitalio.Pull.UP
             self._last_wake = self._wake_button.value
 
+    def _reinit_encoder_button(self):
+        """Reclaim encoder button pin after software idle wake."""
+        config = self._config
+        btn_pin = _pin(config.get("encoder_button_pin"))
+        if btn_pin and self._encoder_button is None:
+            self._encoder_button = digitalio.DigitalInOut(btn_pin)
+            self._encoder_button.direction = digitalio.Direction.INPUT
+            self._encoder_button.pull = digitalio.Pull.UP
+            self._last_encoder_button = self._encoder_button.value
+
     @property
     def debug(self):
         return self._debug
