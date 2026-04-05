@@ -57,6 +57,7 @@ the device by editing simple text files.
 | [HISTORY.md](HISTORY.md) | Project version history |
 | [NOTES.md](NOTES.md) | Development notes and future plans |
 | [Credits.md](Credits.md) | Contributors and acknowledgments |
+Link to google docs schedule of events https://docs.google.com/document/d/1B_Ffg2c_vWS-k63qlIgnEBgbQ5qvtrQ6X7UFEZSzED0/edit?usp=sharing
 
 ## Project Structure
 
