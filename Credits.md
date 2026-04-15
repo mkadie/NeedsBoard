@@ -17,6 +17,14 @@
 - **Adafruit Fruit Jam** — RP2350B development board with audio
 - **YD-ESP32-S3 N16R8** — ESP32-S3 development board (CYD_PLUS)
 
+## Symbol Libraries
+The following open-source symbol libraries are recommended for creating communication boards:
+- **AACIL** — AAC Image Library (https://aacil.neocities.org/) — 10,800+ symbols by Disabled artists and AAC users
+- **ARASAAC** — Aragonese Portal of AAC (https://arasaac.org) — CC BY-NC-SA
+- **Mulberry Symbols** — (https://mulberrysymbols.org) — CC BY-SA
+- **OpenSymbols** — (https://www.opensymbols.org) — aggregator via the OpenAAC Initiative
+- **Sclera** — (https://www.sclera.be) — high-contrast symbols, CC BY-NC
+
 ## Acknowledgments
 - Teachers and parents who test the devices with their students
 - The open-source AAC community

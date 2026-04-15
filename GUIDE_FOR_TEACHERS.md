@@ -324,6 +324,66 @@ If your image looks wrong, try reducing the color count.
 
 ---
 
+## Finding Symbols and Pictures
+
+You don't have to create every picture from scratch! There are several
+free symbol libraries designed specifically for AAC communication. These
+symbols are drawn by professionals and AAC users to be clear, simple,
+and easy to understand at small sizes.
+
+### Recommended Symbol Libraries
+
+**AAC Image Library (AACIL)** — https://aacil.neocities.org/
+Over 10,800 symbols created by Disabled artists and AAC users. Strong
+coverage of disability, identity, and niche topics that other sets miss.
+Also available through Global Symbols.
+
+**ARASAAC** — https://arasaac.org
+Around 13,000 colorful symbols, available in many languages. The most
+widely used open AAC symbol set, funded by the Government of Aragon
+(Spain). License: CC BY-NC-SA.
+
+**Mulberry Symbols** — https://mulberrysymbols.org
+About 3,000 symbols in scalable SVG format, designed specifically for
+adult AAC users. Very permissive license (CC BY-SA) allows any use
+including commercial.
+
+**OpenSymbols** — https://www.opensymbols.org
+An aggregator that pulls from ARASAAC, Mulberry, Sclera, and others —
+over 50,000 symbols searchable in one place. Part of the OpenAAC
+Initiative (https://www.openaac.org).
+
+**Sclera Symbols** — https://www.sclera.be
+Around 11,000 high-contrast white-on-black symbols. Good for users
+with visual processing differences. License: CC BY-NC.
+
+### Converting Symbols for the Device
+
+Most symbol libraries provide PNG or SVG files. The device needs BMP
+files, so you will need to convert them:
+
+1. Download the symbol (PNG or SVG)
+2. Resize to 80×120 pixels (for button images) or 320×240 (for backgrounds)
+3. Convert to BMP format using an online converter or image editor
+4. Copy the BMP file to the appropriate `menus/images/` folder
+
+### A Note on AI-Generated Images
+
+AI image generators can create custom pictures, but they are generally
+not recommended as the primary source for AAC symbols. Standard symbol
+libraries build recognition and meaning through repeated use — the same
+"water" symbol appears on the device, on paper boards, at school, at
+home, and at therapy. This consistency is essential for AAC users.
+AI-generated images are different every time, even with the same prompt,
+which undermines that shared visual vocabulary.
+
+Use established symbol libraries as your primary source. AI generation
+can be a useful supplement for highly personal symbols (a photo of "my
+dog") or very niche concepts where no library symbol exists — but save
+and reuse the generated image rather than regenerating it.
+
+---
+
 ## Button Options Reference
 
 Every button can have these settings:

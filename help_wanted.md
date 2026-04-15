@@ -23,6 +23,8 @@ Contributions of all kinds are welcome!
 - Sound file recording in different languages
 - Combinational symbol systems (liquid + brown = chocolate milk)
 - Menu templates for common vocabulary sets
+- Integration with open symbol libraries (AACIL, ARASAAC, Mulberry, OpenSymbols) — see [GUIDE_FOR_TEACHERS.md](GUIDE_FOR_TEACHERS.md#finding-symbols-and-pictures) for current sources
+- GUI tool for browsing and converting symbols from these libraries into device-ready BMP files
 
 ### Special Needs Expertise
 - AAC best practices
