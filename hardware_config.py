@@ -34,12 +34,13 @@ VARIANTS = {
         "amp_en_pin": "GPIO1",
         "amp_en_active_low": True,
 
-        # SD Card (no onboard slot; set True if external breakout wired)
-        "sd_card": False,
-        "sd_cs": None,
-        "sd_sclk": None,
-        "sd_mosi": None,
-        "sd_miso": None,
+        # SD Card — built-in MicroSD slot using SDIO pins in SPI mode
+        # SDIO CLK=GPIO38, CMD=GPIO40, DATA0=GPIO39, DATA3=GPIO47(CS)
+        "sd_card": True,
+        "sd_cs": "GPIO47",
+        "sd_sclk": "GPIO38",
+        "sd_mosi": "GPIO40",
+        "sd_miso": "GPIO39",
         "sd_shares_display_spi": False,
 
         # Shared I2C bus (touch + codec)

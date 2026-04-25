@@ -731,6 +731,9 @@ class Machine:
             # Allow "stim_games.foo" dotted form too
             cfg_path = cfg_path.replace(".", "/") if "/" not in cfg_path else cfg_path
         if cfg_path:
+            # Ensure absolute so _resolve_path doesn't prepend /menus
+            if not cfg_path.startswith("/"):
+                cfg_path = "/" + cfg_path
             resolved = self._resolve_path(cfg_path)
             try:
                 header, sections = load_game_cfg(resolved)

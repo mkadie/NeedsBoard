@@ -62,7 +62,7 @@ class StorageManager:
 
             sd = sdcardio.SDCard(self._spi, _pin(config["sd_cs"]))
             vfs = storage.VfsFat(sd)
-            storage.mount(vfs, "/sd")
+            storage.mount(vfs, "/sd", readonly=False)
             self._sd_mounted = True
             print("Storage: SD card mounted at /sd")
 
