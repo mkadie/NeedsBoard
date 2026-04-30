@@ -321,7 +321,12 @@ class Machine:
             if button is not None:
                 self.sleep.activity()
                 if time.monotonic() >= wake_until:
-                    self._handle_press(button)
+                    # In language mode, encoder button selects language
+                    if self._lang_mode and self._lang_enabled:
+                        self._select_language(self._lang_index)
+                        self._lang_mode = False
+                    else:
+                        self._handle_press(button)
             else:
                 woke = self.sleep.check()
                 if woke:
@@ -371,7 +376,6 @@ class Machine:
         pos = enc.position
         delta = pos - self._lang_last_pos
         if delta != 0:
-            print("Lang encoder: pos={} last={} delta={}".format(pos, self._lang_last_pos, delta))
             self._lang_last_pos = pos
             flip = self.input._encoder_flip
             self._lang_index = (self._lang_index - delta * flip) % len(self.LANGUAGES)
@@ -387,17 +391,6 @@ class Machine:
                 text = "{} / {}".format(en_name, native_name)
             self.display.set_text(text)
             print("Language:", text)
-
-        # Check encoder button press while in language mode
-        if self._lang_mode and self.input.encoder_button_held:
-            if not hasattr(self, '_lang_btn_was_held'):
-                self._lang_btn_was_held = False
-            if not self._lang_btn_was_held:
-                self._lang_btn_was_held = True
-                self._select_language(self._lang_index)
-                self._lang_mode = False
-        else:
-            self._lang_btn_was_held = False
 
         # Timeout — revert display
         if self._lang_mode and now >= self._lang_timeout:
