@@ -451,6 +451,7 @@ VARIANTS = {
         "emergency_push_sound": "/button_sounds/emergency.mp3",
         "emergency_hold_enabled": True,
         "emergency_hold_seconds": 3,
+        "language_switcher_enabled": True,
         "sleep_enabled": True,
         "sleep_timeout": 120,
 

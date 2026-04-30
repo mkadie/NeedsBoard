@@ -58,6 +58,7 @@ def apply_config(hw_config, user_config):
         "encoder_direction_flip",
         "rotary_encoder",
         "encoder_navigation",
+        "language_switcher_enabled",
         "play_on_release",
         "show_border",
         "display_hint_text",
