@@ -14,8 +14,6 @@ Step-by-step instructions for setting up a new AAC communication device.
 
 **CircuitPython 10.1.4** — Board: `yd_esp32_s3_n16r8`
 
-> **Note:** Do not use CircuitPython 10.1 on older CYD boards that were running 9.x.
-> The 10.1 branch has known issues on some configurations.
 
 1. Download the firmware:
    - Go to https://circuitpython.org/board/yd_esp32_s3_n16r8/
