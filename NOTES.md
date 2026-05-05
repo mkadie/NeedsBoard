@@ -34,6 +34,23 @@ The ESP32-S3 light sleep should draw ~2-5mA on battery.
 - Different board without built-in charger
 - External power switch to cut total board power (like Fruit Jam's FULL_POWER)
 
+## MP3 Playback Bug — Feather RP2350
+
+**GitHub Issue:** https://github.com/mkadie/NeedsBoard/issues/27
+
+MP3 files play distorted on the Feather RP2350 via `audiomp3.MP3Decoder` +
+`audiobusio.I2SOut` (direct I2S, no codec). All sample rates and bitrates
+tested are broken. WAV files (PCM 16-bit, 16kHz, mono) play perfectly.
+
+**Workaround:** Use WAV (16kHz, 16-bit, mono) for all audio on Feather RP2350.
+This is the same format as Moana's original Thai sound files.
+
+**Affected:** FEATHER_RP2350_V1 only. CYD_PLUS (ESP32-S3 + ES8311 codec) plays
+MP3 fine. Fruit Jam (RP2350 + TLV320 DAC) untested.
+
+**TODO:** Investigate separately — may be a CircuitPython RP2350 port issue or
+I2S timing problem. File a CircuitPython upstream bug if confirmed.
+
 ## Pocket Activation / Accidental Presses
 
 The device can be triggered accidentally when carried in a pocket or bag. Consider:
