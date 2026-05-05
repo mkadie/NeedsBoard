@@ -100,7 +100,9 @@ class Machine:
         # Shared I2C bus (touch + codec may share it)
         # Skip if Peripherals owns it or display is I2C (SSD1306)
         self._i2c = None
-        if self._peripherals is None and self._config.get("display_type") != "SSD1306":
+        if (self._peripherals is None
+                and self._config.get("display_type") != "SSD1306"
+                and self._config.get("button_type") != "i2c_expander"):
             scl = _pin(self._config.get("i2c_scl"))
             sda = _pin(self._config.get("i2c_sda"))
             if scl and sda:
