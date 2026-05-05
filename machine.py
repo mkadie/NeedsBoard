@@ -90,6 +90,7 @@ class Machine:
 
         # Sync flash content to SD card if SD is available and new
         if self.storage.sd_available:
+            self.storage.process_move_to_sd()
             self.storage.sync_flash_to_sd()
 
         # Display — pass shared SPI bus if SD card shares it
@@ -317,15 +318,21 @@ class Machine:
         wake_until = 0
 
         while True:
+            # Check if encoder button is being pressed BEFORE poll()
+            # consumes it — used to distinguish from physical buttons
+            enc_btn_down = (self._lang_enabled and
+                            self.input.encoder_button_held)
+
             button = self.input.poll()
             if button is not None:
                 self.sleep.activity()
                 if time.monotonic() >= wake_until:
-                    # In language mode, encoder button selects language
-                    if self._lang_mode and self._lang_enabled:
+                    # In language mode, only ENCODER button selects language
+                    if self._lang_mode and enc_btn_down:
                         self._select_language(self._lang_index)
                         self._lang_mode = False
                     else:
+                        # Physical button or encoder nav — play the sound
                         self._handle_press(button)
             else:
                 woke = self.sleep.check()
@@ -358,7 +365,7 @@ class Machine:
         ("bn", "Bengali", "\u09ac\u09be\u0982\u09b2\u09be", "lang_bn.menu"),
         ("pt", "Portuguese", "Portugu\u00eas", "lang_pt.menu"),
         ("ru", "Russian", "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "lang_ru.menu"),
-        ("de", "German", "Deutsch", "lang_de.menu"),
+        ("cs", "Czech", "\u010ce\u0161tina", "lang_cs.menu"),
     ]
 
     def _check_language_encoder(self):
