@@ -251,6 +251,11 @@ class SleepManager:
             if encoder:
                 last_pos = encoder.position
 
+        # Also check I2C expander buttons if available
+        expander_pins = None
+        if self._input and hasattr(self._input, '_expander_pins'):
+            expander_pins = self._input._expander_pins
+
         while True:
             if wake_btn and not wake_btn.value:
                 print("Sleep: button wake!")
@@ -261,7 +266,17 @@ class SleepManager:
                     print("Sleep: encoder wake (pos {} -> {})".format(
                         last_pos, pos))
                     break
-            time.sleep(0.1)
+            if expander_pins:
+                for pin in expander_pins:
+                    if not pin.value:  # Active low
+                        print("Sleep: I2C button wake!")
+                        break
+                else:
+                    time.sleep(0.1)
+                    continue
+                break  # Inner break hit — exit outer loop
+            else:
+                time.sleep(0.1)
 
         if wake_btn:
             wake_btn.deinit()
