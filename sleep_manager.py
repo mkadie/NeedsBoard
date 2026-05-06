@@ -281,6 +281,10 @@ class SleepManager:
         if wake_btn:
             wake_btn.deinit()
 
+        # Reset button latch to stop vibration motors
+        if self._input and hasattr(self._input, 'reset_button_latch'):
+            self._input.reset_button_latch()
+
         if needs_reset:
             # Heavy wake: full device reset
             self._wake_from_idle()
