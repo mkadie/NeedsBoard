@@ -156,6 +156,35 @@ the working device. The master_images version is a different image (shows
 "Talker" branding). The correct file is saved in the repo root. Do NOT
 regenerate from master_images — always copy from the repo or a working device.
 
+## Multi-Lingual Language Pack Switcher
+
+- 12 languages: Thai (default), Japanese, English, Mandarin, Hindi, Spanish, French, Arabic, Bengali, Portuguese, Russian, Czech
+- Encoder scrolls through languages showing full-screen 1-bit BMP images (320x240) with English + native script
+- Press encoder to select, 10-second timeout reverts
+- No persistence — resets to Thai (or config default) on reboot
+- Sound files: WAV 16kHz 16-bit mono (clean headers, no LIST chunks) — MP3 doesn't work on Feather RP2350 direct I2S
+- Sound generation: `tools/generate_language_sounds.py` (gTTS -> WAV via ffmpeg) in T-Rex_talker_interactive repo
+- Menu generation: `tools/generate_language_menus.py` — creates `lang_<code>.menu` per language
+- Image generation: PIL/Pillow with NotoSans fonts for all scripts
+- Storage: Language WAVs on SD card (~3MB for 96 files), images on flash (113KB)
+- Config: `language_switcher_enabled = true` in hardware_config.py (FEATHER_RP2350_V1 only currently)
+- Known issues fixed: Thai font (NotoSansThai-Bold), Portuguese text overflow (auto-fit), language image flashing after selection (reset _lang_timeout and encoder position)
+
+## move_to_sd Staging Mechanism
+
+- Files placed in `/move_to_sd/` on flash are copied to `/sd/` on boot maintaining directory structure
+- Flash delete fails silently (read-only at runtime) — clean up from USB after reboot
+- Useful for deploying large content (language packs, libraries) that doesn't fit on flash
+- Process: copy to flash via USB -> reboot -> files auto-copy to SD -> delete staging dir from USB
+- Batching: if total > free flash space, deploy in multiple batches
+
+## RP2350 Recovery Notes
+
+- RP2040 flash_nuke.uf2 does NOT work on RP2350
+- For boot loop recovery: use Safe Mode (double-click RESET during boot)
+- Or: hold BOOT + plug USB for bootloader, then re-flash CircuitPython UF2
+- CircuitPython 10.x may have I2C conflicts not present in 9.x (duplicate board.I2C() calls fail)
+
 ## Testing Checklist for New Devices
 
 1. Verify serial port detection (udevadm info)
