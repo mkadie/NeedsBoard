@@ -333,6 +333,8 @@ class Machine:
                     if self._lang_mode and enc_btn_down:
                         self._select_language(self._lang_index)
                         self._lang_mode = False
+                        self._lang_timeout = 0
+                        self._lang_last_pos = self.input._encoder.position if self.input._encoder else 0
                     else:
                         # Physical button or encoder nav — play the sound
                         self._handle_press(button)
@@ -392,39 +394,43 @@ class Machine:
             self._lang_timeout = now + 10.0
             self.sleep.activity()
 
-            # Show language name
+            # Show language image full-screen
             code, en_name, native_name, _ = self.LANGUAGES[self._lang_index]
-            if en_name == native_name:
-                text = en_name
-            else:
+            lang_img = "/lang_images/lang_{}.bmp".format(code)
+            if self.storage:
+                lang_img = self.storage.resolve_path(lang_img)
+            try:
+                self.display.show_image(lang_img)
+            except Exception:
+                # Fallback to text if image missing
                 text = "{} / {}".format(en_name, native_name)
-            self.display.set_text(text)
-            print("Language:", text)
+                self.display.set_text(text)
+            print("Language:", en_name)
 
-        # Timeout — revert display
+        # Timeout — restore menu background
         if self._lang_mode and now >= self._lang_timeout:
             self._lang_mode = False
-            self.display.set_text("")
+            self.display.restore_background()
             print("Language timeout — reverted")
 
     def _select_language(self, index):
         """Load the selected language's menu."""
         code, en_name, native_name, menu_file = self.LANGUAGES[index]
         print("Selecting language:", en_name)
-        self.display.set_text("Loading {}...".format(en_name))
+
+        # Restore menu background first (clears the language image)
+        self.display.restore_background()
 
         try:
             from menu_parser import MenuStack
             self._menu_stack = MenuStack(self._menus_dir, menu_file,
                                          storage=self.storage)
             self._build_grid()
-            self.display.restore_background()
             self._update_display()
             self._reset_selection()
             print("Language loaded:", en_name, "menu:", menu_file)
         except Exception as e:
             print("Language load error:", e)
-            self.display.set_text("Error: " + str(e))
 
     def _check_emergency_hold(self):
         """Check if encoder button is held for emergency_hold_seconds.
