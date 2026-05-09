@@ -1,0 +1,87 @@
+# ===================================================
+#  Pim's Board — 8-button Thai variant (Moana set)
+#
+#  Built for the Fruit Jam DVI variant (FRUITJAM_DVI_KBD).
+#  4 columns x 2 rows = 8 cells, mapped to numeric keypad
+#  keys 1..8 (left-to-right, top-to-bottom).
+#
+#  Layout:
+#  +----------+----------+----------+----------+
+#  |   Milk   |  Water   |  Snack   |  Play    |
+#  |    1     |    2     |    3     |    4     |
+#  +----------+----------+----------+----------+
+#  |   Mom    |   Yes    |   No    | Thank You |
+#  |    5     |    6     |    7     |    8     |
+#  +----------+----------+----------+----------+
+#
+#  Image set: 320x240 BMPs from talker_v3/image_320x240/.
+#  Available now: milk, water, yes, no.
+#  Placeholders pending Thai-set 320x240 art: snack, play, mum, thank_you.
+#
+#  Sound set: Thai .wav files from /home/trex/claude/Moana/button_sounds/.
+#  Note: audio_player today loads MP3 only — convert these to .mp3 (or
+#  extend audio_player to handle .wav) before audio will play.
+# ===================================================
+
+[menu]
+name = Pim's Board (Thai)
+type = grid
+columns = 4
+rows = 2
+background = images/needs_small.bmp
+
+# ----- Top Row (keys 1..4) -----
+
+[milk]
+label = Milk
+image = images/milk.bmp
+sound = sounds/thai/milk.mp3
+position = 1
+
+[water]
+label = Water
+image = images/water.bmp
+sound = sounds/thai/water.mp3
+position = 2
+
+[snack]
+label = Snack
+# image = images/snack.bmp   # add 320x240 art
+sound = sounds/thai/snack.mp3
+position = 3
+
+[play]
+label = Play
+# image = images/play.bmp    # add 320x240 art
+sound = sounds/thai/play.mp3
+position = 4
+
+# ----- Bottom Row (keys 5..8) -----
+
+[mum]
+label = Mom
+# image = images/mum.bmp     # add 320x240 art
+sound = sounds/thai/mum.mp3
+position = 5
+
+[yes]
+label = Yes
+image = images/yes.bmp
+sound = sounds/thai/yes.mp3
+vibrate = short
+light = green
+position = 6
+
+[no]
+label = No
+image = images/no.bmp
+sound = sounds/thai/no.mp3
+vibrate = short
+light = red
+position = 7
+
+[thank_you]
+label = Thank You
+# image = images/thank_you.bmp   # add 320x240 art
+sound = sounds/thai/thank_you.mp3
+position = 8

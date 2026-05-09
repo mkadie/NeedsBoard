@@ -33,6 +33,10 @@ class InputManager:
         self._last_press_time = 0  # Global debounce for ALL inputs
         self._debug = True
 
+        # Grid dimensions (used by selection navigation)
+        self._cols = config.get("button_cols", 4)
+        self._rows = config.get("button_rows", 2)
+
         # Touch screen
         self._touch = None
         if config.get("touch_screen", False):
@@ -42,7 +46,7 @@ class InputManager:
         self._button_int = None
         self._button_data = []
         self._button_latch = None
-        if config.get("max_buttons", 0) > 0:
+        if config.get("max_buttons", 0) > 0 and config.get("button_data_pins"):
             self._init_buttons(config)
 
         # Direct GPIO buttons (individual pins, no decoder)
@@ -60,10 +64,14 @@ class InputManager:
         # Encoder navigation: rotate to select, press to activate
         self._encoder_nav = config.get("encoder_navigation", False)
         self._selected_index = 0
-        max_grid = config.get("button_cols", 4) * config.get("button_rows", 2)
-        self._max_index = max_grid
+        self._max_index = self._cols * self._rows
         if config.get("rotary_encoder", False):
             self._init_encoder(config)
+
+        # USB HID keyboard
+        self._kb_device = None
+        if config.get("input_type") == "USB_HID_KEYBOARD":
+            self._init_keyboard(config)
 
         # Wake button
         self._wake_button = None
@@ -121,6 +129,180 @@ class InputManager:
             self._button_latch.direction = digitalio.Direction.OUTPUT
             self._button_latch.value = False
 
+    def _init_keyboard(self, config):
+        """Set up a USB HID boot keyboard on the Fruit Jam USB host port.
+
+        Lazy-attaches: if no keyboard is present at startup, polling will
+        retry every retry_period seconds until one is plugged in.
+        """
+        # Optionally enable USB host 5V power rail (firmware usually does this)
+        pwr_name = config.get("usb_host_5v_power")
+        self._kb_5v = None
+        if pwr_name:
+            try:
+                self._kb_5v = digitalio.DigitalInOut(_pin(pwr_name))
+                self._kb_5v.direction = digitalio.Direction.OUTPUT
+                self._kb_5v.value = True
+            except Exception as e:
+                # Pin may already be claimed by firmware — non-fatal
+                if self._debug:
+                    print("USB host 5V enable skipped:", e)
+
+        self._kb_device = None
+        self._kb_in_endpoint = 0x81  # standard boot-keyboard interrupt IN
+        self._kb_report = bytearray(8)
+        self._kb_prev_keys = set()
+        self._kb_next_attempt = 0.0
+        self._kb_retry_period = 1.0
+        self._try_attach_keyboard()
+        print("USB keyboard input ready (attached={})".format(
+            self._kb_device is not None))
+
+    def _try_attach_keyboard(self):
+        """Find a USB HID boot keyboard and resolve its IN endpoint.
+
+        Requires:
+          - The Fruit Jam USB host port brought up in boot.py (PIO-USB):
+              import usb_host, board, digitalio
+              digitalio.DigitalInOut(board.USB_HOST_5V_POWER).switch_to_output(value=True)
+              usb_host.Port(board.USB_HOST_DATA_PLUS, board.USB_HOST_DATA_MINUS)
+          - adafruit_usb_host_descriptors in lib/ to parse the config descriptor
+            (find_boot_keyboard_endpoint returns (interface_num, ep_addr)).
+
+        Notes:
+          - Don't call is_kernel_driver_active / detach_kernel_driver — those
+            don't exist on CircuitPython USB host and will raise TypeError.
+          - Use %-formatting for hex prints; some firmwares choke on '{:04x}'
+            against returned-from-C ints.
+        """
+        try:
+            import usb.core
+            import adafruit_usb_host_descriptors as _usbhd
+        except ImportError as e:
+            if self._debug:
+                print("USB host libs missing:", e)
+            return
+        try:
+            devs = list(usb.core.find(find_all=True))
+        except Exception as e:
+            if self._debug:
+                print("usb.core.find failed:", type(e).__name__, repr(e))
+            return
+        for dev in devs:
+            try:
+                info = _usbhd.find_boot_keyboard_endpoint(dev)
+            except Exception as e:
+                if self._debug:
+                    print("kb descriptor parse failed:", type(e).__name__, repr(e))
+                continue
+            if info is None:
+                continue
+            # Helper returns (interface_num, ep_addr); pick the IN endpoint.
+            if isinstance(info, tuple):
+                ep_addr = None
+                for x in info:
+                    if isinstance(x, int) and (x & 0x80):
+                        ep_addr = x
+                        break
+                if ep_addr is None:
+                    continue
+            else:
+                ep_addr = info
+            try:
+                dev.set_configuration()
+            except Exception as cfg_e:
+                if self._debug:
+                    print("set_configuration note:", type(cfg_e).__name__, cfg_e)
+            self._kb_device = dev
+            self._kb_in_endpoint = ep_addr
+            print("USB keyboard attached VID:%04x PID:%04x  ep=0x%02x" % (
+                dev.idVendor, dev.idProduct, ep_addr))
+            return
+
+    def _check_keyboard(self):
+        """Poll the USB keyboard. Returns button index or None."""
+        if self._kb_device is None:
+            now = time.monotonic()
+            if now < self._kb_next_attempt:
+                return None
+            self._kb_next_attempt = now + self._kb_retry_period
+            self._try_attach_keyboard()
+            if self._kb_device is None:
+                return None
+
+        try:
+            self._kb_device.read(
+                self._kb_in_endpoint, self._kb_report, timeout=2,
+            )
+        except Exception as e:
+            msg = str(e)
+            # Timeout is the normal "nothing pressed" case
+            if "timeout" in msg.lower() or "TIMEOUT" in msg:
+                return None
+            # Anything else (disconnect, stall) — drop the device and re-attach later
+            if self._debug:
+                print("kb read err, dropping device:", e)
+            self._kb_device = None
+            self._kb_prev_keys = set()
+            return None
+
+        keys_now = set(b for b in self._kb_report[2:8] if b)
+        new_keys = keys_now - self._kb_prev_keys
+        self._kb_prev_keys = keys_now
+        for code in new_keys:
+            result = self._handle_key(code)
+            if result is not None:
+                return result
+        return None
+
+    # HID usage codes
+    _KEY_RIGHT = 0x4F
+    _KEY_LEFT  = 0x50
+    _KEY_DOWN  = 0x51
+    _KEY_UP    = 0x52
+    _KEY_ENTER = 0x28
+    _KEY_SPACE = 0x2C
+    _KEY_1     = 0x1E   # 0x1E..0x26 -> 1..9
+    _KEY_9     = 0x26
+    _KEY_0     = 0x27
+
+    def _handle_key(self, code):
+        """Map an HID key code to a press event.
+
+        Arrow keys move the selected_index (matches encoder navigation).
+        Enter/Space activates the selected cell.
+        Number keys 1..9, 0 directly activate cells 0..9 (clamped to grid).
+        """
+        if code == self._KEY_UP:
+            self._move_selection(-self._cols)
+        elif code == self._KEY_DOWN:
+            self._move_selection(self._cols)
+        elif code == self._KEY_LEFT:
+            self._move_selection(-1)
+        elif code == self._KEY_RIGHT:
+            self._move_selection(1)
+        elif code in (self._KEY_ENTER, self._KEY_SPACE):
+            if self._debug:
+                print("Keyboard: activate", self._selected_index)
+            return self._selected_index
+        elif self._KEY_1 <= code <= self._KEY_9:
+            idx = code - self._KEY_1
+            if idx < self._max_index:
+                if self._debug:
+                    print("Keyboard: number", idx + 1, "->", idx)
+                return idx
+        elif code == self._KEY_0:
+            if 9 < self._max_index:
+                return 9
+        return None
+
+    def _move_selection(self, delta):
+        old = self._selected_index
+        self._selected_index = (self._selected_index + delta) % self._max_index
+        if self._debug:
+            print("Keyboard: select", self._selected_index,
+                  "(was", old, "delta", delta, ")")
+
     def _init_direct_buttons(self, config):
         """Initialize individual GPIO buttons (active low with pull-up)."""
         active_low = config.get("direct_buttons_active_low", True)
@@ -170,6 +352,12 @@ class InputManager:
 
         # Encoder button
         result = self._check_encoder()
+        if result is not None:
+            self._last_press_time = now
+            return result
+
+        # USB HID keyboard
+        result = self._check_keyboard()
         if result is not None:
             self._last_press_time = now
             return result

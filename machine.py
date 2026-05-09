@@ -28,13 +28,14 @@ class Machine:
     """AAC communication device: reads config, inits hardware, runs loop."""
 
     def __init__(self, variant_name=None, menus_dir="/menus",
-                 start_menu="base.menu"):
+                 start_menu=None):
         """Build the machine from a named variant config.
 
         Args:
             variant_name: Key into VARIANTS dict. Uses DEFAULT_VARIANT if None.
             menus_dir: Directory containing .menu files.
-            start_menu: Filename of the starting menu.
+            start_menu: Filename of the starting menu. Falls back to
+                config["starting_menu"] then to "base.menu".
         """
         if variant_name is None:
             variant_name = DEFAULT_VARIANT
@@ -44,6 +45,9 @@ class Machine:
 
         self._config = VARIANTS[variant_name]
         self._menus_dir = menus_dir
+        if start_menu is None:
+            start_menu = self._config.get("starting_menu", "base.menu")
+        self._start_menu = start_menu
         print("AAC Device — variant:", self._config["name"])
 
         # Fruit Jam Peripherals (must init before anything else on FruitJam)
@@ -108,6 +112,10 @@ class Machine:
         self.sleep.set_pixel(self._pixel)
         self.sleep.set_input(self.input)
         self.sleep.set_display(self.display)
+        if self._peripherals:
+            self.sleep.set_peripherals(self._peripherals)
+        if self._power_switch:
+            self.sleep.set_power_switch(self._power_switch)
 
         # Menu system — try to load from .menu files, fall back to button_config
         self._menu_stack = None

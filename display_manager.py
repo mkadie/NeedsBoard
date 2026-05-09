@@ -36,8 +36,53 @@ class DisplayManager:
         self._zone_width = self._width // self._cols
         self._zone_height = self._height // self._rows
 
+        # Defaults; only the SPI display path populates these
+        self._spi = None
+        self._display_bus = None
+        self._backlight = None
+
         displayio.release_displays()
 
+        display_type = config.get("display_type", "ILI9341")
+        if display_type == "FRUITJAM_DVI":
+            self._init_fruitjam_dvi(config)
+        else:
+            self._init_spi_display(config, spi)
+
+        # Display group — background loaded later by menu system or fallback
+        self._splash = displayio.Group()
+        self._display.root_group = self._splash
+        bg = config.get("background_image")
+        if bg:
+            try:
+                self._load_background(bg)
+            except Exception as e:
+                print("Initial background skipped:", e)
+
+        # Selection highlight overlay
+        self._highlight = None
+        self._highlight_index = -1
+
+    def _init_fruitjam_dvi(self, config):
+        """Bring up the Fruit Jam onboard DVI/HDMI output.
+
+        request_display_config() validates against the firmware's allowed
+        sizes ({320,240}, {360,200}, {640,480}, {720,400}) and populates
+        supervisor.runtime.display — board.DISPLAY does NOT exist on this
+        firmware.
+        """
+        import supervisor
+        from adafruit_fruitjam.peripherals import request_display_config
+        request_display_config(self._width, self._height)
+        self._display = supervisor.runtime.display
+        scale = config.get("framebuffer_pixel_scale", 1)
+        print("DVI ready: {}x{} fb -> {}x{} hdmi".format(
+            self._width, self._height,
+            self._width * scale, self._height * scale,
+        ))
+
+    def _init_spi_display(self, config, spi):
+        """Bring up an SPI-attached panel (ILI9341 / ST7735R)."""
         # SPI bus — use shared bus if provided, otherwise create one
         if spi is not None:
             self._spi = spi
@@ -61,9 +106,7 @@ class DisplayManager:
             fw_kwargs["baudrate"] = baudrate
         self._display_bus = fourwire.FourWire(self._spi, **fw_kwargs)
 
-        # Display driver — select by type
         display_type = config.get("display_type", "ILI9341")
-
         if display_type == "ST7735R":
             from adafruit_st7735r import ST7735R
             self._display = ST7735R(
@@ -89,27 +132,12 @@ class DisplayManager:
             self._display_bus.send(0x21, b"")
 
         # Backlight
-        self._backlight = None
         bl_pin = _pin(config.get("lcd_backlight"))
         if bl_pin:
             import digitalio
             self._backlight = digitalio.DigitalInOut(bl_pin)
             self._backlight.direction = digitalio.Direction.OUTPUT
             self._backlight.value = True
-
-        # Display group — background loaded later by menu system or fallback
-        self._splash = displayio.Group()
-        self._display.root_group = self._splash
-        bg = config.get("background_image")
-        if bg:
-            try:
-                self._load_background(bg)
-            except Exception as e:
-                print("Initial background skipped:", e)
-
-        # Selection highlight overlay
-        self._highlight = None
-        self._highlight_index = -1
 
     def _load_background(self, image_path):
         """Load and display a BMP background image."""
