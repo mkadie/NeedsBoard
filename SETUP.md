@@ -242,23 +242,11 @@ cd cyd_plus
 
 ## Multi-Lingual Language Packs
 
-To deploy language packs to a new Feather RP2350 device:
-
-1. Generate language sounds and menus using the tools in the T-Rex_talker_interactive repo
-   (`tools/generate_language_sounds.py` and `tools/generate_language_menus.py`)
-2. Language WAV files (~3MB for 96 files across 12 languages) go on the SD card under
-   `sd/button_sounds/languages/<lang_code>/`
-3. Since the files are too large to fit on flash, use the `move_to_sd` staging mechanism:
-   - Copy a batch of language files to `CIRCUITPY/move_to_sd/button_sounds/languages/`
-   - Eject and reboot — files auto-copy to the SD card
-   - Reconnect and delete the `move_to_sd/` directory from flash
-   - Repeat for additional batches if total exceeds free flash space
-4. Language display images (1-bit BMP, 320x240, ~113KB total) go directly on flash
-   under `menus/images/languages/`
-5. Language menu files (`lang_<code>.menu`) go in `menus/`
-6. Enable in `hardware_config.py`: `language_switcher_enabled = true`
-
-The language switcher is currently supported on FEATHER_RP2350_V1 only.
+The multi-lingual language-pack switcher is a sub-program shipped via the
+[T-Rex_talker_interactive](https://github.com/mkadie/T-Rex_talker_interactive)
+repository (different licensing). NeedsBoard itself runs single-language;
+follow the setup notes in `T-Rex_talker_interactive/MULTILINGUAL.md` if
+you want to install language packs on top of the base build.
 
 ## Version Info
 

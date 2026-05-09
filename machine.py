@@ -307,37 +307,15 @@ class Machine:
             self.display.set_highlight(self.input.selected_index)
             self._update_text_for_index(self.input.selected_index)
 
-        # Language switcher state
-        self._lang_enabled = self._config.get("language_switcher_enabled", False)
-        self._lang_mode = False
-        self._lang_index = 0
-        self._lang_timeout = 0
-        self._lang_last_pos = 0
-        if self._lang_enabled and hasattr(self.input, '_encoder'):
-            self._lang_last_pos = self.input._encoder.position if self.input._encoder else 0
-
         wake_grace = self._config.get("wake_ignore_seconds", 1.0)
         wake_until = 0
 
         while True:
-            # Check if encoder button is being pressed BEFORE poll()
-            # consumes it — used to distinguish from physical buttons
-            enc_btn_down = (self._lang_enabled and
-                            self.input.encoder_button_held)
-
             button = self.input.poll()
             if button is not None:
                 self.sleep.activity()
                 if time.monotonic() >= wake_until:
-                    # In language mode, only ENCODER button selects language
-                    if self._lang_mode and enc_btn_down:
-                        self._select_language(self._lang_index)
-                        self._lang_mode = False
-                        self._lang_timeout = 0
-                        self._lang_last_pos = self.input._encoder.position if self.input._encoder else 0
-                    else:
-                        # Physical button or encoder nav — play the sound
-                        self._handle_press(button)
+                    self._handle_press(button)
             else:
                 woke = self.sleep.check()
                 if woke:
@@ -346,91 +324,12 @@ class Machine:
             # Check for emergency long-press
             if self._emergency_hold_enabled:
                 self._check_emergency_hold()
-            # Language switcher: encoder scrolls languages
-            if self._lang_enabled:
-                self._check_language_encoder()
             # Update highlight and text for encoder navigation
-            elif self._has_encoder_nav:
+            if self._has_encoder_nav:
                 idx = self.input.selected_index
                 self.display.set_highlight(idx)
                 self._update_text_for_index(idx)
             time.sleep(0.01)
-
-    # Language definitions: (code, english, native, menu_file)
-    LANGUAGES = [
-        ("th", "Thai", "\u0e44\u0e17\u0e22", "lang_th.menu"),
-        ("ja", "Japanese", "\u65e5\u672c\u8a9e", "lang_ja.menu"),
-        ("en", "English", "English", "lang_en.menu"),
-        ("zh", "Mandarin", "\u4e2d\u6587", "lang_zh.menu"),
-        ("hi", "Hindi", "\u0939\u093f\u0928\u094d\u0926\u0940", "lang_hi.menu"),
-        ("es", "Spanish", "Espa\u00f1ol", "lang_es.menu"),
-        ("fr", "French", "Fran\u00e7ais", "lang_fr.menu"),
-        ("ar", "Arabic", "\u0627\u0644\u0639\u0631\u0628\u064a\u0629", "lang_ar.menu"),
-        ("bn", "Bengali", "\u09ac\u09be\u0982\u09b2\u09be", "lang_bn.menu"),
-        ("pt", "Portuguese", "Portugu\u00eas", "lang_pt.menu"),
-        ("ru", "Russian", "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "lang_ru.menu"),
-        ("cs", "Czech", "\u010ce\u0161tina", "lang_cs.menu"),
-    ]
-
-    def _check_language_encoder(self):
-        """Check encoder for language scrolling.
-
-        Encoder rotation enters language mode, showing language names.
-        Button press selects. 10s timeout reverts.
-        """
-        now = time.monotonic()
-        enc = self.input._encoder
-        if enc is None:
-            return
-
-        # Check encoder rotation
-        pos = enc.position
-        delta = pos - self._lang_last_pos
-        if delta != 0:
-            self._lang_last_pos = pos
-            flip = self.input._encoder_flip
-            self._lang_index = (self._lang_index - delta * flip) % len(self.LANGUAGES)
-            self._lang_mode = True
-            self._lang_timeout = now + 10.0
-            self.sleep.activity()
-
-            # Show language image full-screen
-            code, en_name, native_name, _ = self.LANGUAGES[self._lang_index]
-            lang_img = "/lang_images/lang_{}.bmp".format(code)
-            if self.storage:
-                lang_img = self.storage.resolve_path(lang_img)
-            try:
-                self.display.show_image(lang_img)
-            except Exception:
-                # Fallback to text if image missing
-                text = "{} / {}".format(en_name, native_name)
-                self.display.set_text(text)
-            print("Language:", en_name)
-
-        # Timeout — restore menu background
-        if self._lang_mode and now >= self._lang_timeout:
-            self._lang_mode = False
-            self.display.restore_background()
-            print("Language timeout — reverted")
-
-    def _select_language(self, index):
-        """Load the selected language's menu."""
-        code, en_name, native_name, menu_file = self.LANGUAGES[index]
-        print("Selecting language:", en_name)
-
-        # Restore menu background first (clears the language image)
-        self.display.restore_background()
-
-        try:
-            from menu_parser import MenuStack
-            self._menu_stack = MenuStack(self._menus_dir, menu_file,
-                                         storage=self.storage)
-            self._build_grid()
-            self._update_display()
-            self._reset_selection()
-            print("Language loaded:", en_name, "menu:", menu_file)
-        except Exception as e:
-            print("Language load error:", e)
 
     def _check_emergency_hold(self):
         """Check if encoder button is held for emergency_hold_seconds.

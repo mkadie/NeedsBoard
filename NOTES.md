@@ -158,17 +158,10 @@ regenerate from master_images — always copy from the repo or a working device.
 
 ## Multi-Lingual Language Pack Switcher
 
-- 12 languages: Thai (default), Japanese, English, Mandarin, Hindi, Spanish, French, Arabic, Bengali, Portuguese, Russian, Czech
-- Encoder scrolls through languages showing full-screen 1-bit BMP images (320x240) with English + native script
-- Press encoder to select, 10-second timeout reverts
-- No persistence — resets to Thai (or config default) on reboot
-- Sound files: WAV 16kHz 16-bit mono (clean headers, no LIST chunks) — MP3 doesn't work on Feather RP2350 direct I2S
-- Sound generation: `tools/generate_language_sounds.py` (gTTS -> WAV via ffmpeg) in T-Rex_talker_interactive repo
-- Menu generation: `tools/generate_language_menus.py` — creates `lang_<code>.menu` per language
-- Image generation: PIL/Pillow with NotoSans fonts for all scripts
-- Storage: Language WAVs on SD card (~3MB for 96 files), images on flash (113KB)
-- Config: `language_switcher_enabled = true` in hardware_config.py (FEATHER_RP2350_V1 only currently)
-- Known issues fixed: Thai font (NotoSansThai-Bold), Portuguese text overflow (auto-fit), language image flashing after selection (reset _lang_timeout and encoder position)
+Moved to the [T-Rex_talker_interactive](https://github.com/mkadie/T-Rex_talker_interactive)
+repository (different licensing). The language-pack switcher is a sub-program
+that runs on top of the base AAC software; see `MULTILINGUAL.md` over there
+for details.
 
 ## move_to_sd Staging Mechanism
 

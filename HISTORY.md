@@ -28,7 +28,6 @@ architecture, and production deployment tools.
 - **Sleep/wake**: Light sleep on ESP32, software idle on RP2350, touch/button wake
 - **SD card auto-installer**: Drop files on SD, auto-detects board and configures
 - **Multi-language**: Thai/English bilingual support (Moana's device)
-- **Multi-lingual language pack switcher**: 12 languages with full-screen display images (1-bit BMP)
 - **move_to_sd staging mechanism**: Auto-copy files from flash staging dir to SD card on boot
 - **WAV-only audio on Feather RP2350**: MP3 decoder bug — WAV 16kHz 16-bit mono as workaround
 - **NeoPixel feedback**: Button light animations during playback
