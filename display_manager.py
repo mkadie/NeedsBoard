@@ -49,6 +49,8 @@ class DisplayManager:
 
         if display_type == "SSD1306":
             self._init_ssd1306(config)
+        elif display_type == "FRUITJAM_DVI":
+            self._init_fruitjam_dvi(config)
         else:
             self._init_spi_display(config, spi)
 
@@ -83,6 +85,26 @@ class DisplayManager:
             height=self._height,
             rotation=config.get("display_rotation", 0),
         )
+
+    def _init_fruitjam_dvi(self, config):
+        """Bring up the Fruit Jam onboard DVI/HDMI output.
+
+        request_display_config() validates against the firmware's allowed
+        sizes ({320,240}, {360,200}, {640,480}, {720,400}) and populates
+        supervisor.runtime.display — board.DISPLAY does NOT exist on this
+        firmware. Verified on Fruit Jam CP 10.0.3.
+        """
+        import supervisor
+        from adafruit_fruitjam.peripherals import request_display_config
+        request_display_config(self._width, self._height)
+        self._spi = None
+        self._display_bus = None
+        self._backlight = None
+        self._display = supervisor.runtime.display
+        scale = config.get("framebuffer_pixel_scale", 1)
+        print("DVI ready: %dx%d fb -> %dx%d hdmi" % (
+            self._width, self._height,
+            self._width * scale, self._height * scale))
 
     def _init_spi_display(self, config, spi):
         """Initialize SPI color display (ILI9341 or ST7735R)."""

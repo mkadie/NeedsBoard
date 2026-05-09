@@ -459,6 +459,117 @@ VARIANTS = {
         "sleep_mode": "light",
         "sleep_wake_pins": [],
     },
+
+    "FRUITJAM_DVI_KBD": {
+        "name": "FRUITJAM_DVI_KBD",
+
+        # Display — onboard DVI/HDMI output. The RP2350B firmware only
+        # accepts a fixed set of framebuffer sizes:
+        #   {(320,240), (360,200), (640,480), (720,400)}.
+        # 320x240 is auto-2x-scaled to 640x480 HDMI at 16 bpp.
+        # Bring-up:
+        #     import displayio, supervisor
+        #     from adafruit_fruitjam.peripherals import request_display_config
+        #     displayio.release_displays()
+        #     request_display_config(320, 240)
+        #     display = supervisor.runtime.display   # NOT board.DISPLAY
+        "display_type": "FRUITJAM_DVI",
+        "screen_width": 320,
+        "screen_height": 240,
+        "framebuffer_pixel_scale": 2,    # 320x240 -> 640x480 HDMI signal
+        "framebuffer_color_depth": 16,
+        "display_rotation": 0,
+        "display_inverted": False,
+        # Initial background while menu loads — overridden by menu.background.
+        "background_image": "/menus/images/needs_small.bmp",
+        "start_menu": "base_moana.menu",   # canonical Moana 8-button board
+        # SPI-display pins are unused (DVI uses dedicated CKP/CKN/D0..2 P/N pairs)
+        "lcd_cs": None,
+        "lcd_dc": None,
+        "lcd_sclk": None,
+        "lcd_mosi": None,
+        "lcd_miso": None,
+        "lcd_backlight": None,
+        "lcd_reset": None,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals (matches FRUITJAM_V2)
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "dac_volume": -10,
+        "speaker_volume": 0,
+        "speaker_gain": 24,
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # No daughterboard rail to gate on bare Fruit Jam
+        "full_power_pin": None,
+        "full_power_active_low": False,
+        "full_power_settle_ms": 0,
+
+        # Peripherals reset — must be HIGH for DAC operation
+        "periph_reset_pin": "PERIPH_RESET",
+
+        # SD Card — onboard SDIO slot present but disabled here until tested.
+        "sd_card": False,
+        "sd_cs": "SD_CS",
+        "sd_sclk": "SD_SCK",
+        "sd_mosi": "SD_MOSI",
+        "sd_miso": "SD_MISO",
+        "sd_shares_display_spi": False,
+
+        # I2C (DAC + STEMMA peripherals)
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        # No touch screen on a DVI monitor
+        "touch_screen": False,
+
+        # Input — USB HID keyboard via the Fruit Jam USB host port.
+        # Requires /boot.py with usb_host.Port() — see docs.
+        "input_type": "USB_HID_KEYBOARD",
+        "usb_host_dp": "USB_HOST_DATA_PLUS",
+        "usb_host_dm": "USB_HOST_DATA_MINUS",
+        "usb_host_5v_power": "USB_HOST_5V_POWER",
+
+        # Onboard buttons — 3 tactile buttons on the Fruit Jam PCB.
+        # Active-LOW with internal pull-up. max_buttons here counts decoder-bus
+        # buttons (none here); the 3 onboard ones are direct GPIO.
+        "max_buttons": 0,
+        "direct_button_pins": ["BUTTON1", "BUTTON2", "BUTTON3"],
+        "direct_buttons_active_low": True,
+
+        # Rotary encoder — not used in this variant (keyboard handles navigation)
+        "rotary_encoder": False,
+        "encoder_navigation": False,
+        "encoder_pin_a": None,
+        "encoder_pin_b": None,
+        "encoder_button_pin": None,
+        "encoder_button_index": 0,
+
+        "wake_button_pin": "BUTTON1",
+        "wake_button_index": 0,
+
+        # Onboard 5x NeoPixel strip
+        "neopixel_pin": "NEOPIXEL",
+        "neopixel_count": 5,
+
+        # 4x2 = 8 cells, mapped 1:1 to keypad keys 1..8
+        "button_cols": 4,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Sleep — software idle (RP2350B has no alarm module).
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+    },
 }
 
 # Change this single line to switch machine variant
