@@ -324,6 +324,10 @@ class Machine:
             # Check for emergency long-press
             if self._emergency_hold_enabled:
                 self._check_emergency_hold()
+            # 3.5 mm jack plug/unplug -> auto-route audio (FRUITJAM_DAC only)
+            poll = getattr(self.audio, "poll_headset_detect", None)
+            if poll is not None:
+                poll()
             # Update highlight and text for encoder navigation
             if self._has_encoder_nav:
                 idx = self.input.selected_index

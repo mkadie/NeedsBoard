@@ -497,7 +497,16 @@ VARIANTS = {
         "volume": 80,
         "dac_volume": -10,
         "speaker_volume": 0,
-        "speaker_gain": 24,
+        "speaker_gain": 24,         # max analog speaker amp gain
+        "headphone_volume": 0,      # max analog headphone volume
+        "headphone_left_gain": 9,   # max analog HP amp gain (chip cap)
+        "headphone_right_gain": 9,  # max analog HP amp gain (chip cap)
+        # 3.5 mm jack auto-detect: speaker by default, swap to headphone
+        # when something is plugged in. AudioPlayer polls the codec's
+        # headset_status from the main loop.
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.5,
+        "headset_debounce": 1.0,
         "i2s_bclk": None,
         "i2s_ws": None,
         "i2s_dout": None,
