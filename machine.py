@@ -5,16 +5,9 @@ loads the menu system, and runs the main application loop.
 """
 
 import time
-import busio
 import board
 from hardware_config import VARIANTS, DEFAULT_VARIANT
-from storage_manager import StorageManager
-from display_manager import DisplayManager
-from audio_player import AudioPlayer
-from input_manager import InputManager
-from menu_parser import MenuStack, get_grid_items, get_sorted_items
-from action import Action
-from sleep_manager import SleepManager
+from config_reader import load_config, apply_config
 
 
 def _pin(name):
@@ -34,8 +27,7 @@ class Machine:
         Args:
             variant_name: Key into VARIANTS dict. Uses DEFAULT_VARIANT if None.
             menus_dir: Directory containing .menu files.
-            start_menu: Filename of the starting menu. Falls back to
-                config["starting_menu"] then to "base.menu".
+            start_menu: Filename of the starting menu.
         """
         if variant_name is None:
             variant_name = DEFAULT_VARIANT
@@ -43,17 +35,46 @@ class Machine:
         if variant_name not in VARIANTS:
             raise ValueError("Unknown variant: " + variant_name)
 
-        self._config = VARIANTS[variant_name]
+        self._config = dict(VARIANTS[variant_name])  # Copy so overlay is safe
         self._menus_dir = menus_dir
+
+        # Load user config and overlay onto hardware defaults
+        user_config = load_config("/config.txt")
+        if user_config:
+            apply_config(self._config, user_config)
+            print("User config loaded ({} settings)".format(len(user_config)))
+
         if start_menu is None:
-            start_menu = self._config.get("starting_menu", "base.menu")
+            start_menu = self._config.get("start_menu", "base.menu")
         self._start_menu = start_menu
         print("AAC Device — variant:", self._config["name"])
 
-        # Fruit Jam Peripherals (must init before anything else on FruitJam)
+        # FULL_POWER — enable first so rail settles during other init
+        self._full_power = None
+        if self._config.get("full_power_pin"):
+            self._init_full_power()
+
+        # Emergency push fast path: minimal DAC init, skip Peripherals
+        emergency_held = self._check_emergency_pin()
+        self._emergency_audio = None  # Holds I2S if emergency played
+
+        if emergency_held and self._config["sound_system"] == "FRUITJAM_DAC":
+            self._play_emergency_sound()
+
+        # Fruit Jam Peripherals (full init for normal operation)
         self._peripherals = None
         if self._config["sound_system"] == "FRUITJAM_DAC":
             self._init_fruitjam_peripherals()
+
+        # Deferred imports — after emergency sound finishes (if any)
+        import busio
+        from storage_manager import StorageManager
+        from display_manager import DisplayManager
+        from audio_player import AudioPlayer
+        from input_manager import InputManager
+        from menu_parser import MenuStack
+        from action import Action
+        from sleep_manager import SleepManager
 
         # Status LED (optional)
         self._pixel = None
@@ -63,33 +84,32 @@ class Machine:
             self._pixel = neopixel.NeoPixel(neo_pin, 1, brightness=0.05, auto_write=True)
         self.set_status("init")
 
-        # Power switch (e.g., TPS22917 for LCD on FruitJam)
-        self._power_switch = None
-        if self._config.get("power_switch_pin"):
-            self._init_power_switch()
-
         # Storage manager — mounts SD card, creates shared SPI bus
         # Must be initialized BEFORE display (SD card needs SPI first)
         self.storage = StorageManager(self._config)
 
         # Sync flash content to SD card if SD is available and new
         if self.storage.sd_available:
+            self.storage.process_move_to_sd()
             self.storage.sync_flash_to_sd()
-
-        # Shared I2C bus (touch + codec may share it)
-        # Skip if Peripherals already owns the I2C bus
-        self._i2c = None
-        if self._peripherals is None:
-            scl = _pin(self._config.get("i2c_scl"))
-            sda = _pin(self._config.get("i2c_sda"))
-            if scl and sda:
-                self._i2c = busio.I2C(scl, sda, frequency=self._config.get("i2c_freq", 400_000))
 
         # Display — pass shared SPI bus if SD card shares it
         spi = self.storage.spi if self._config.get("sd_shares_display_spi") else None
         self.display = DisplayManager(self._config, spi=spi)
+
+        # Shared I2C bus (touch + codec may share it)
+        # Skip if Peripherals owns it or display is I2C (SSD1306)
+        self._i2c = None
+        if (self._peripherals is None
+                and self._config.get("display_type") != "SSD1306"
+                and self._config.get("button_type") != "i2c_expander"):
+            scl = _pin(self._config.get("i2c_scl"))
+            sda = _pin(self._config.get("i2c_sda"))
+            if scl and sda:
+                self._i2c = busio.I2C(scl, sda, frequency=self._config.get("i2c_freq", 400_000))
         print("Display ready")
 
+        # Full audio init (reuses Peripherals audio if emergency already started)
         self.audio = AudioPlayer(self._config, i2c=self._i2c,
                                  storage=self.storage,
                                  peripherals=self._peripherals)
@@ -105,6 +125,7 @@ class Machine:
             pixel=self._pixel,
             menus_dir=menus_dir,
             storage=self.storage,
+            config=self._config,
         )
 
         # Sleep / power management
@@ -114,15 +135,15 @@ class Machine:
         self.sleep.set_display(self.display)
         if self._peripherals:
             self.sleep.set_peripherals(self._peripherals)
-        if self._power_switch:
-            self.sleep.set_power_switch(self._power_switch)
+        if self._full_power:
+            self.sleep.set_full_power(self._full_power)
 
         # Menu system — try to load from .menu files, fall back to button_config
         self._menu_stack = None
         self._grid = None
         self._use_legacy = False
         try:
-            self._menu_stack = MenuStack(menus_dir, start_menu,
+            self._menu_stack = MenuStack(menus_dir, self._start_menu,
                                          storage=self.storage)
             self._build_grid()
             self._update_display()
@@ -132,6 +153,86 @@ class Machine:
             self._use_legacy = True
             import button_config
             self._legacy_sounds = button_config.button_sound
+
+    def _check_emergency_pin(self):
+        """Check if emergency button is held at boot. Returns True if pressed.
+
+        Pin defaults to encoder_button_pin if emergency_push_pin not set.
+        """
+        cfg = self._config
+        if not cfg.get("emergency_push_enabled", False):
+            return False
+
+        pin_name = cfg.get("emergency_push_pin",
+                           cfg.get("encoder_button_pin"))
+        if not pin_name:
+            return False
+
+        import digitalio
+        pin = digitalio.DigitalInOut(_pin(pin_name))
+        pin.direction = digitalio.Direction.INPUT
+        pin.pull = digitalio.Pull.UP
+        time.sleep(0.01)  # Let pull-up settle
+        pressed = not pin.value  # Active low (pulled up, pressed = low)
+        pin.deinit()
+
+        if pressed:
+            print("EMERGENCY: button held at boot!")
+        return pressed
+
+    def _play_emergency_sound(self):
+        """Play emergency sound via minimal direct DAC init (~0.2s).
+
+        Bypasses the full Peripherals import (1.3s) by directly
+        configuring MCLK, TLV320 DAC, and I2S. Blocks until done.
+        """
+        cfg = self._config
+        sound_file = cfg.get("emergency_push_sound")
+        if not sound_file:
+            return
+
+        try:
+            import pwmio
+            import busio
+            import audiobusio
+            import audiomp3
+            import adafruit_tlv320
+
+            # MCLK — 15 MHz master clock for DAC PLL
+            mclk = pwmio.PWMOut(board.I2S_MCLK,
+                                frequency=15_000_000, duty_cycle=2**15)
+
+            # DAC — minimal I2C config
+            i2c = board.I2C()
+            dac = adafruit_tlv320.TLV320DAC3100(i2c)
+            sample_rate = cfg.get("codec_sample_rate", 22050)
+            dac.configure_clocks(sample_rate=sample_rate,
+                                 bit_depth=16, mclk_freq=15_000_000)
+            dac.speaker_output = True
+            dac.dac_volume = cfg.get("dac_volume", -10)
+            dac.speaker_volume = cfg.get("speaker_volume", 0)
+            dac.speaker_gain = cfg.get("speaker_gain", 24)
+
+            # I2S output
+            audio = audiobusio.I2SOut(board.I2S_BCLK,
+                                      board.I2S_WS, board.I2S_DIN)
+
+            # Play
+            f = open(sound_file, "rb")
+            mp3 = audiomp3.MP3Decoder(f)
+            audio.play(mp3)
+            print("EMERGENCY: playing", sound_file)
+            while audio.playing:
+                time.sleep(0.01)
+            f.close()
+            print("EMERGENCY: done")
+
+            # Clean up so Peripherals can claim these pins
+            audio.deinit()
+            mclk.deinit()
+            i2c.deinit()
+        except Exception as e:
+            print("EMERGENCY: sound error:", e)
 
     def _init_fruitjam_peripherals(self):
         """Initialize Fruit Jam Peripherals (DAC, MCLK, PERIPH_RESET).
@@ -151,21 +252,20 @@ class Machine:
             self._peripherals._buttons = []
             print("Fruit Jam Peripherals ready (encoder pins released)")
 
-    def _init_power_switch(self):
-        """Enable power switch (e.g., TPS22917 for LCD rail)."""
+    def _init_full_power(self):
+        """Enable FULL_POWER pin — no blocking settle, overlaps with other init."""
         import digitalio
         cfg = self._config
-        pin = _pin(cfg["power_switch_pin"])
-        self._power_switch = digitalio.DigitalInOut(pin)
-        self._power_switch.direction = digitalio.Direction.OUTPUT
-        active_low = cfg.get("power_switch_active_low", True)
-        self._power_switch.value = not active_low  # Enable: LOW if active_low
-        settle = cfg.get("power_switch_settle_ms", 500)
-        time.sleep(settle / 1000.0)
-        print("Power switch enabled (settle {}ms)".format(settle))
+        pin = _pin(cfg["full_power_pin"])
+        self._full_power = digitalio.DigitalInOut(pin)
+        self._full_power.direction = digitalio.Direction.OUTPUT
+        active_low = cfg.get("full_power_active_low", True)
+        self._full_power.value = not active_low  # Enable: LOW if active_low
+        print("FULL_POWER enabled")
 
     def _build_grid(self):
         """Build the press grid from the current menu."""
+        from menu_parser import get_grid_items, get_sorted_items
         header = self._menu_stack.header
         menu_type = self._menu_stack.menu_type
 
@@ -182,6 +282,7 @@ class Machine:
     def run(self):
         """Main application loop. Polls inputs and executes actions."""
         cfg = self._config
+
         print("AAC Device ready")
         print("Grid:", cfg["button_cols"], "x", cfg["button_rows"])
         if self.storage.sd_available:
@@ -197,20 +298,208 @@ class Machine:
 
         # Show initial highlight if encoder navigation is active
         self._has_encoder_nav = self._config.get("encoder_navigation", False)
+        self._last_shown_index = -1
+        self._emergency_hold_enabled = self._config.get("emergency_hold_enabled", True)
+        self._emergency_hold_time = self._config.get("emergency_hold_seconds", 3)
+        self._hold_start = 0
+        self._hold_triggered = False
         if self._has_encoder_nav:
             self.display.set_highlight(self.input.selected_index)
+            self._update_text_for_index(self.input.selected_index)
+
+        # Language switcher state
+        self._lang_enabled = self._config.get("language_switcher_enabled", False)
+        self._lang_mode = False
+        self._lang_index = 0
+        self._lang_timeout = 0
+        self._lang_last_pos = 0
+        if self._lang_enabled and hasattr(self.input, '_encoder'):
+            self._lang_last_pos = self.input._encoder.position if self.input._encoder else 0
+
+        wake_grace = self._config.get("wake_ignore_seconds", 1.0)
+        wake_until = 0
 
         while True:
+            # Check if encoder button is being pressed BEFORE poll()
+            # consumes it — used to distinguish from physical buttons
+            enc_btn_down = (self._lang_enabled and
+                            self.input.encoder_button_held)
+
             button = self.input.poll()
             if button is not None:
                 self.sleep.activity()
-                self._handle_press(button)
+                if time.monotonic() >= wake_until:
+                    # In language mode, only ENCODER button selects language
+                    if self._lang_mode and enc_btn_down:
+                        self._select_language(self._lang_index)
+                        self._lang_mode = False
+                        self._lang_timeout = 0
+                        self._lang_last_pos = self.input._encoder.position if self.input._encoder else 0
+                    else:
+                        # Physical button or encoder nav — play the sound
+                        self._handle_press(button)
             else:
-                self.sleep.check()
-            # Update highlight position from encoder
-            if self._has_encoder_nav:
-                self.display.set_highlight(self.input.selected_index)
+                woke = self.sleep.check()
+                if woke:
+                    wake_until = time.monotonic() + wake_grace
+                    print("Wake grace: ignoring input for {}s".format(wake_grace))
+            # Check for emergency long-press
+            if self._emergency_hold_enabled:
+                self._check_emergency_hold()
+            # Language switcher: encoder scrolls languages
+            if self._lang_enabled:
+                self._check_language_encoder()
+            # Update highlight and text for encoder navigation
+            elif self._has_encoder_nav:
+                idx = self.input.selected_index
+                self.display.set_highlight(idx)
+                self._update_text_for_index(idx)
             time.sleep(0.01)
+
+    # Language definitions: (code, english, native, menu_file)
+    LANGUAGES = [
+        ("th", "Thai", "\u0e44\u0e17\u0e22", "lang_th.menu"),
+        ("ja", "Japanese", "\u65e5\u672c\u8a9e", "lang_ja.menu"),
+        ("en", "English", "English", "lang_en.menu"),
+        ("zh", "Mandarin", "\u4e2d\u6587", "lang_zh.menu"),
+        ("hi", "Hindi", "\u0939\u093f\u0928\u094d\u0926\u0940", "lang_hi.menu"),
+        ("es", "Spanish", "Espa\u00f1ol", "lang_es.menu"),
+        ("fr", "French", "Fran\u00e7ais", "lang_fr.menu"),
+        ("ar", "Arabic", "\u0627\u0644\u0639\u0631\u0628\u064a\u0629", "lang_ar.menu"),
+        ("bn", "Bengali", "\u09ac\u09be\u0982\u09b2\u09be", "lang_bn.menu"),
+        ("pt", "Portuguese", "Portugu\u00eas", "lang_pt.menu"),
+        ("ru", "Russian", "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "lang_ru.menu"),
+        ("cs", "Czech", "\u010ce\u0161tina", "lang_cs.menu"),
+    ]
+
+    def _check_language_encoder(self):
+        """Check encoder for language scrolling.
+
+        Encoder rotation enters language mode, showing language names.
+        Button press selects. 10s timeout reverts.
+        """
+        now = time.monotonic()
+        enc = self.input._encoder
+        if enc is None:
+            return
+
+        # Check encoder rotation
+        pos = enc.position
+        delta = pos - self._lang_last_pos
+        if delta != 0:
+            self._lang_last_pos = pos
+            flip = self.input._encoder_flip
+            self._lang_index = (self._lang_index - delta * flip) % len(self.LANGUAGES)
+            self._lang_mode = True
+            self._lang_timeout = now + 10.0
+            self.sleep.activity()
+
+            # Show language image full-screen
+            code, en_name, native_name, _ = self.LANGUAGES[self._lang_index]
+            lang_img = "/lang_images/lang_{}.bmp".format(code)
+            if self.storage:
+                lang_img = self.storage.resolve_path(lang_img)
+            try:
+                self.display.show_image(lang_img)
+            except Exception:
+                # Fallback to text if image missing
+                text = "{} / {}".format(en_name, native_name)
+                self.display.set_text(text)
+            print("Language:", en_name)
+
+        # Timeout — restore menu background
+        if self._lang_mode and now >= self._lang_timeout:
+            self._lang_mode = False
+            self.display.restore_background()
+            print("Language timeout — reverted")
+
+    def _select_language(self, index):
+        """Load the selected language's menu."""
+        code, en_name, native_name, menu_file = self.LANGUAGES[index]
+        print("Selecting language:", en_name)
+
+        # Restore menu background first (clears the language image)
+        self.display.restore_background()
+
+        try:
+            from menu_parser import MenuStack
+            self._menu_stack = MenuStack(self._menus_dir, menu_file,
+                                         storage=self.storage)
+            self._build_grid()
+            self._update_display()
+            self._reset_selection()
+            print("Language loaded:", en_name, "menu:", menu_file)
+        except Exception as e:
+            print("Language load error:", e)
+
+    def _check_emergency_hold(self):
+        """Check if encoder button is held for emergency_hold_seconds.
+
+        Plays the emergency sound if held long enough. Resets when released.
+        """
+        held = self.input.encoder_button_held
+        if held:
+            if self._hold_start == 0:
+                self._hold_start = time.monotonic()
+            elif not self._hold_triggered:
+                elapsed = time.monotonic() - self._hold_start
+                if elapsed >= self._emergency_hold_time:
+                    self._hold_triggered = True
+                    print("EMERGENCY: hold triggered ({:.0f}s)".format(elapsed))
+                    sound = self._config.get("emergency_push_sound")
+                    if sound:
+                        self.display.set_text("EMERGENCY")
+                        self.set_status("playing")
+                        self.audio.play(sound)
+                        self.set_status("ready")
+        else:
+            self._hold_start = 0
+            self._hold_triggered = False
+
+    def _get_item_text(self, index):
+        """Get text_description for a grid item by index, with wrapping."""
+        if not self._grid:
+            return ""
+        idx = index % len(self._grid)
+        item = self._grid[idx]
+        if item:
+            return item.get("text_description", item.get("label", ""))
+        return ""
+
+    def _update_text_for_index(self, index):
+        """Update display text with prev/current/next items."""
+        if index == self._last_shown_index:
+            return
+        self._last_shown_index = index
+        if not self._grid:
+            return
+        n = len(self._grid)
+        prev_text = self._get_item_text((index - 1) % n)
+        curr_text = self._get_item_text(index)
+        next_text = self._get_item_text((index + 1) % n)
+
+        if hasattr(self.display, 'set_text_lines'):
+            self.display.set_text_lines(prev_text, curr_text, next_text)
+        else:
+            self.display.set_text(curr_text)
+
+    def _reset_selection(self):
+        """Reset encoder selection to first item and update text."""
+        if self._has_encoder_nav:
+            self.input._selected_index = 0
+            if hasattr(self.input, '_encoder') and self.input._encoder:
+                self.input._encoder.position = 0
+                self.input._last_encoder_pos = 0
+        self._last_shown_index = -1  # Force text refresh
+        # Force full text update for new menu
+        self._last_shown_index = -1
+        self._update_text_for_index(0)
+        self._last_shown_index = 0
+        # Force display refresh
+        try:
+            self.display.display.refresh()
+        except:
+            pass
 
     def _handle_press(self, button_index):
         """Handle a button press — dispatch to menu or legacy mode."""
@@ -230,8 +519,14 @@ class Machine:
             return  # Empty grid slot
 
         print("Press:", item.get("label", item.get("id", "?")))
+        # Show the pressed item's text on screen
+        text = item.get("text_description", item.get("label", ""))
+        self.display.set_text(text)
+        # Hide highlight during image/sound playback
+        self.display.set_highlight(-1)
         self.set_status("playing")
 
+        press_start = time.monotonic()
         try:
             nav = self.action.execute(item)
         except Exception as e:
@@ -239,17 +534,38 @@ class Machine:
             self.set_status("error")
             time.sleep(0.5)
             self.set_status("ready")
+            self._update_display()
             return
+
+        # Keep zoom image visible for at least 3 seconds (only if zoom shown)
+        has_nav = "submenu" in item or "list" in item or "back" in item
+        if not has_nav and item.get("image") and self.action._zoom_enabled:
+            elapsed = time.monotonic() - press_start
+            if elapsed < 3:
+                time.sleep(3 - elapsed)
 
         self.set_status("ready")
 
+        # Reset button latch after playback (V1 pattern)
+        if hasattr(self.input, 'reset_button_latch'):
+            self.input.reset_button_latch()
+
         # Handle navigation
         if nav is None:
+            # Restore menu background after zoom image
+            self.display.restore_background()
+            # Restore highlight
+            if self._has_encoder_nav:
+                self.display.set_highlight(self.input.selected_index)
             return
         if nav == "back":
             if self._menu_stack.back():
                 self._build_grid()
+                self.display.restore_background()
                 self._update_display()
+                self._reset_selection()
+                if self._has_encoder_nav:
+                    self.display.set_highlight(self.input.selected_index)
                 print("Back to:", self._menu_stack.name)
             else:
                 print("Already at root menu")
@@ -258,7 +574,11 @@ class Machine:
             try:
                 self._menu_stack.navigate(menu_file)
                 self._build_grid()
+                self.display.restore_background()
                 self._update_display()
+                self._reset_selection()
+                if self._has_encoder_nav:
+                    self.display.set_highlight(self.input.selected_index)
                 print("Navigated to:", self._menu_stack.name)
             except Exception as e:
                 print("Navigation error:", e)
@@ -279,13 +599,25 @@ class Machine:
         return path
 
     def _update_display(self):
-        """Update the display background for the current menu."""
+        """Update the display background for the current menu.
+
+        Stores the last working background path so it can be restored
+        after zoom images without re-parsing the menu header.
+        """
         bg = self._menu_stack.header.get("background")
         if bg:
+            resolved = self._resolve_path(bg)
             try:
-                self.display.set_background(self._resolve_path(bg))
+                self.display.set_background(resolved)
+                self._current_bg = resolved  # Remember working path
             except Exception as e:
                 print("Background load error:", e)
+                # Try the stored fallback
+                if hasattr(self, '_current_bg') and self._current_bg:
+                    try:
+                        self.display.set_background(self._current_bg)
+                    except:
+                        pass
 
     def _play_legacy(self, button_index):
         """Legacy mode: play sound by index from button_config."""

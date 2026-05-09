@@ -1,0 +1,17 @@
+# Reference/training files (not for distribution)
+Arduino/
+circuitpython_es8311/
+es8311_local/
+*.pdf
+
+# Test scripts
+test_*.py
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db
+System Volume Information/

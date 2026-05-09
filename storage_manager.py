@@ -191,6 +191,89 @@ class StorageManager:
         print("Sync: flash→SD copied {} files".format(copied))
         return copied
 
+    def process_move_to_sd(self):
+        """Move files from /move_to_sd/ on flash to SD card.
+
+        Files in /move_to_sd/ are copied to /sd/ maintaining their
+        directory structure, then deleted from flash to free space.
+        This allows deploying large content (language packs) via USB
+        that gets transferred to SD on next boot.
+
+        Example: /move_to_sd/button_sounds/languages/ja/milk.wav
+              -> /sd/button_sounds/languages/ja/milk.wav
+              -> flash file deleted after successful copy
+        """
+        if not self._sd_mounted:
+            return 0
+
+        staging = "/move_to_sd"
+        try:
+            os.listdir(staging)
+        except OSError:
+            return 0  # No staging directory
+
+        print("move_to_sd: processing...")
+        moved = self._move_tree(staging, "/sd")
+
+        # Remove the empty staging directory
+        self._remove_empty_dirs(staging)
+        try:
+            os.rmdir(staging)
+        except OSError:
+            pass
+
+        if moved > 0:
+            self._scan_sd()  # Refresh SD index
+        print("move_to_sd: {} files moved to SD".format(moved))
+        return moved
+
+    def _move_tree(self, src_dir, dst_dir):
+        """Recursively copy files from src to dst, deleting src after copy."""
+        moved = 0
+        self._ensure_dir(dst_dir)
+
+        try:
+            entries = os.listdir(src_dir)
+        except OSError:
+            return 0
+
+        for entry in entries:
+            src = src_dir + "/" + entry
+            dst = dst_dir + "/" + entry
+
+            try:
+                os.listdir(src)
+                # Directory — recurse
+                moved += self._move_tree(src, dst)
+            except OSError:
+                # File — copy to SD (delete from flash if possible)
+                self._copy_file(src, dst)
+                moved += 1
+                try:
+                    os.remove(src)
+                except OSError:
+                    pass  # Flash is read-only at runtime — OK
+
+        return moved
+
+    def _remove_empty_dirs(self, path):
+        """Remove empty directories recursively (bottom-up)."""
+        try:
+            entries = os.listdir(path)
+        except OSError:
+            return
+        for entry in entries:
+            child = path + "/" + entry
+            try:
+                os.listdir(child)
+                self._remove_empty_dirs(child)
+                try:
+                    os.rmdir(child)
+                except OSError:
+                    pass
+            except OSError:
+                pass
+
     def sync_sd_to_flash(self, dirs=None):
         """Copy content from SD card to flash.
 
