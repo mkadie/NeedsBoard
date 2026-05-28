@@ -1,10 +1,21 @@
-"""AAC Communication Device — main entry point.
+"""AAC Communication Device — main entry point."""
 
-Change the machine variant in hardware_config.py (DEFAULT_VARIANT)
-or pass it directly: Machine("CYD_PLUS") or Machine("TALKER_PICO2").
-"""
+import time
+import gc
 
+
+def _warm_flash():
+    try:
+        import es8311
+    except ImportError:
+        es8311 = None
+    from adafruit_display_text import label
+    from stim_games import subprogram, multi_lingual, game_config
+    _ = (es8311, label, subprogram, multi_lingual, game_config)
+
+
+gc.collect()
+_warm_flash()
 from machine import Machine
-
 app = Machine()
 app.run()
