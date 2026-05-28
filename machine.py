@@ -1,3 +1,17 @@
+# ---------------------------------------------------------------------------
+# Modified file — originally from T-Rex Talker (https://github.com/mkadie).
+#
+# Upstream license: MIT.
+#     Copyright (c) T-Rex Talker contributors. All rights reserved under MIT.
+#     Permission is hereby granted, free of charge, to any person obtaining
+#     a copy of the upstream software and associated documentation files,
+#     to deal in the Software without restriction, subject to the conditions
+#     in the upstream LICENSE file. See ../NOTICE for the full MIT text.
+#
+# Modifications in this file were added as part of T-Rex Talker Interactive
+# and are licensed under the PolyForm Noncommercial License 1.0.0.
+# See ../LICENSE for terms and ../upstream_patches/README.md for what changed.
+# ---------------------------------------------------------------------------
 """Machine — top-level AAC device orchestrator.
 
 Initializes all hardware subsystems from a named variant config,
@@ -90,7 +104,6 @@ class Machine:
 
         # Sync flash content to SD card if SD is available and new
         if self.storage.sd_available:
-            self.storage.process_move_to_sd()
             self.storage.sync_flash_to_sd()
 
         # Display — pass shared SPI bus if SD card shares it
@@ -100,9 +113,7 @@ class Machine:
         # Shared I2C bus (touch + codec may share it)
         # Skip if Peripherals owns it or display is I2C (SSD1306)
         self._i2c = None
-        if (self._peripherals is None
-                and self._config.get("display_type") != "SSD1306"
-                and self._config.get("button_type") != "i2c_expander"):
+        if self._peripherals is None and self._config.get("display_type") != "SSD1306":
             scl = _pin(self._config.get("i2c_scl"))
             sda = _pin(self._config.get("i2c_sda"))
             if scl and sda:
@@ -296,44 +307,182 @@ class Machine:
             print("Items:", len(self._menu_stack.items))
         self.set_status("ready")
 
-        # Show initial highlight if encoder navigation is active
-        self._has_encoder_nav = self._config.get("encoder_navigation", False)
+        # Encoder is repurposed as a language switcher on touch-input
+        # variants (CYD_PLUS). Skip menu-highlight wiring entirely so
+        # encoder rotation only drives the language overlay, not menu nav.
+        self._has_encoder_nav = False
         self._last_shown_index = -1
         self._emergency_hold_enabled = self._config.get("emergency_hold_enabled", True)
         self._emergency_hold_time = self._config.get("emergency_hold_seconds", 3)
         self._hold_start = 0
         self._hold_triggered = False
-        if self._has_encoder_nav:
-            self.display.set_highlight(self.input.selected_index)
-            self._update_text_for_index(self.input.selected_index)
+
+        # Language switcher overlay — encoder rotation enters; encoder
+        # click commits; 10s no-activity reverts to whatever menu was
+        # active before the rotation started.
+        self._lang_active = False
+        self._lang_index = 0
+        self._lang_timeout = 0
+        self._lang_revert_menu = None
+        try:
+            from stim_games.multi_lingual import LANGUAGES as _L
+            self._LANGUAGES = _L
+        except Exception as e:
+            print("Lang switcher: multi_lingual import failed:", e)
+            self._LANGUAGES = ()
+        enc = getattr(self.input, "_encoder", None)
+        self._lang_last_pos = enc.position if enc is not None else 0
+        self._lang_flip = getattr(self.input, "_encoder_flip", 1)
+
+        # Config-driven subprogram mode: `mode = stim_games/foo.py` in
+        # config.txt causes the device to boot into that subprogram
+        # after hardware/menu init finishes. When the subprogram exits,
+        # control drops through to the menu loop (start_menu).
+        mode = self._config.get("mode")
+        if mode and isinstance(mode, str) and mode.endswith(".py"):
+            print("Config mode: launching subprogram", mode)
+            self._launch_subprogram(mode)
+            # After subprogram exit, repaint the menu before looping
+            try:
+                self.display.restore_background()
+                self._update_display()
+                self._last_shown_index = -1
+            except Exception as e:
+                print("Post-subprogram redraw error:", e)
+            # Resync encoder position so the picker doesn't fire on stale delta
+            enc = getattr(self.input, "_encoder", None)
+            if enc is not None:
+                self._lang_last_pos = enc.position
 
         wake_grace = self._config.get("wake_ignore_seconds", 1.0)
         wake_until = 0
 
         while True:
+            # Sample encoder-button state BEFORE poll() consumes it, so
+            # we can attribute the upcoming press to encoder vs. touch.
+            enc_btn_down = bool(getattr(self.input, "encoder_button_held", False))
+
             button = self.input.poll()
             if button is not None:
                 self.sleep.activity()
                 if time.monotonic() >= wake_until:
-                    self._handle_press(button)
+                    if self._lang_active and enc_btn_down:
+                        # Picker overlay is up and the press came from the
+                        # encoder button → commit the highlighted language.
+                        self._lang_commit(self._lang_index)
+                        self._lang_active = False
+                    elif enc_btn_down:
+                        # No overlay active → cycle directly to the next
+                        # language. Lets a single encoder/BUTTON3 tap rotate
+                        # languages even when encoder rotation isn't wired.
+                        self._lang_cycle_next()
+                    else:
+                        self._handle_press(button)
             else:
                 woke = self.sleep.check()
                 if woke:
                     wake_until = time.monotonic() + wake_grace
                     print("Wake grace: ignoring input for {}s".format(wake_grace))
-            # Check for emergency long-press
             if self._emergency_hold_enabled:
                 self._check_emergency_hold()
-            # 3.5 mm jack plug/unplug -> auto-route audio (FRUITJAM_DAC only)
-            poll = getattr(self.audio, "poll_headset_detect", None)
-            if poll is not None:
-                poll()
-            # Update highlight and text for encoder navigation
-            if self._has_encoder_nav:
-                idx = self.input.selected_index
-                self.display.set_highlight(idx)
-                self._update_text_for_index(idx)
+            self._check_lang_encoder()
             time.sleep(0.01)
+
+    def _check_lang_encoder(self):
+        """Encoder rotation enters/cycles the language picker overlay.
+
+        After 10s of no rotation/press the overlay reverts and the
+        previous menu is restored.
+        """
+        if not self._LANGUAGES:
+            return
+        enc = getattr(self.input, "_encoder", None)
+        if enc is None:
+            return
+        now = time.monotonic()
+        pos = enc.position
+        delta = pos - self._lang_last_pos
+        if delta != 0:
+            self._lang_last_pos = pos
+            if not self._lang_active:
+                # Entering: remember menu to revert to, seed index from it.
+                curr = None
+                if self._menu_stack is not None:
+                    stack = getattr(self._menu_stack, "_stack", None)
+                    if stack:
+                        curr = stack[-1]
+                self._lang_revert_menu = curr
+                self._lang_index = 0
+                for i, lang in enumerate(self._LANGUAGES):
+                    if lang[3] == curr:
+                        self._lang_index = i
+                        break
+                self._lang_active = True
+            self._lang_index = (self._lang_index - delta * self._lang_flip) % len(self._LANGUAGES)
+            self._lang_show()
+            self._lang_timeout = now + 10.0
+            self.sleep.activity()
+        elif self._lang_active and now >= self._lang_timeout:
+            self._lang_active = False
+            self.display.restore_background()
+            print("Lang switcher: timeout — reverted")
+
+    def _lang_show(self):
+        _code, en_name, native_name, _menu = self._LANGUAGES[self._lang_index]
+        path = "/lang_images/lang_{}.bmp".format(_code)
+        if self.storage is not None:
+            path = self.storage.resolve_path(path)
+        try:
+            self.display.show_image(path)
+        except Exception as e:
+            print("Lang switcher: image error ({}):".format(e), path)
+            try:
+                self.display.set_text("{} / {}".format(en_name, native_name))
+            except Exception:
+                pass
+        print("Lang switcher: highlight", en_name)
+
+    def _lang_cycle_next(self):
+        """Advance directly to the next language. Used when the user taps
+        the encoder click (BUTTON3) without first turning the encoder."""
+        n = len(self._LANGUAGES)
+        if n == 0:
+            return
+        curr_menu = None
+        if self._menu_stack is not None:
+            stack = getattr(self._menu_stack, "_stack", None)
+            if stack:
+                curr_menu = stack[-1]
+        curr = 0
+        for i, lang in enumerate(self._LANGUAGES):
+            if lang[3] == curr_menu:
+                curr = i
+                break
+        nxt = (curr + 1) % n
+        en_name = self._LANGUAGES[nxt][1]
+        print("Lang switcher: cycle ->", en_name)
+        self._lang_commit(nxt)
+
+    def _lang_commit(self, index):
+        _code, en_name, _native, menu_file = self._LANGUAGES[index]
+        print("Lang switcher: commit", en_name, "->", menu_file)
+        self.display.restore_background()
+        from menu_parser import MenuStack
+        for attempt in range(3):
+            try:
+                self._menu_stack = MenuStack(
+                    self._menus_dir, menu_file, storage=self.storage)
+                self._build_grid()
+                self._update_display()
+                if hasattr(self, "_reset_selection"):
+                    self._reset_selection()
+                print("Lang switcher: loaded", menu_file)
+                return
+            except Exception as e:
+                print("Lang switcher: load attempt {} failed: {}".format(
+                    attempt + 1, e))
+                time.sleep(0.1)
+        print("Lang switcher: gave up loading", menu_file)
 
     def _check_emergency_hold(self):
         """Check if encoder button is held for emergency_hold_seconds.
@@ -485,6 +634,21 @@ class Machine:
                 print("Navigated to:", self._menu_stack.name)
             except Exception as e:
                 print("Navigation error:", e)
+        elif nav.startswith("subprogram:"):
+            # Launch a Python subprogram (stim game, helper, etc.)
+            # Menu stack is NOT touched — on return we redraw the
+            # current menu so the user lands back where they launched.
+            target = nav.split(":", 1)[1]
+            self._launch_subprogram(target)
+            try:
+                self.display.restore_background()
+                self._update_display()
+                self._last_shown_index = -1
+                if self._has_encoder_nav:
+                    self.display.set_highlight(self.input.selected_index)
+                    self._update_text_for_index(self.input.selected_index)
+            except Exception as e:
+                print("Menu redraw error:", e)
 
     def _resolve_path(self, path):
         """Resolve a menu-relative path to an absolute device path.
@@ -541,6 +705,47 @@ class Machine:
 
         self.set_status("ready")
 
+    def _launch_subprogram(self, target):
+        """Load and run a Python subprogram (e.g. a stim game).
+
+        `target` is a path-like reference: "stim_games/bubble_pop.py",
+        "stim_games.bubble_pop", or any module importable from /lib.
+
+        An optional sidecar config file with the same stem and a .cfg
+        extension is loaded and passed to the subprogram. For example,
+        `stim_games/aac_trainer.py` will look for
+        `stim_games/aac_trainer.cfg`.
+
+        Hardware (display, audio, input, pixel, storage) stays initialized
+        — the subprogram receives `self` as its `machine` reference and
+        is expected to leave the device in a usable state on exit.
+        """
+        from stim_games.subprogram import launch_subprogram
+        from stim_games.game_config import load as load_game_cfg
+
+        cfg = None
+        # Locate sidecar .cfg next to the .py file
+        cfg_path = None
+        if target.endswith(".py"):
+            cfg_path = target[:-3] + ".cfg"
+            # Allow "stim_games.foo" dotted form too
+            cfg_path = cfg_path.replace(".", "/") if "/" not in cfg_path else cfg_path
+        if cfg_path:
+            resolved = self._resolve_path(cfg_path)
+            try:
+                header, sections = load_game_cfg(resolved)
+                if header or sections:
+                    cfg = {"header": header, "sections": sections}
+                    print("Loaded subprogram config:", resolved)
+            except Exception as e:  # noqa: BLE001
+                print("Subprogram config load skipped:", e)
+
+        self.set_status("playing")
+        try:
+            launch_subprogram(self, target, config=cfg)
+        finally:
+            self.set_status("ready")
+
     def set_status(self, state):
         """Update NeoPixel status LED. No-op if no LED configured."""
         if self._pixel is None:
@@ -552,3 +757,4 @@ class Machine:
             "error": (255, 0, 0),     # Red
         }
         self._pixel[0] = colors.get(state, (255, 255, 255))
+        self._status = state
