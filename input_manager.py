@@ -184,7 +184,19 @@ class InputManager:
         print("Direct buttons ready:", len(self._direct_buttons), "pins")
 
     def _init_encoder(self, config):
-        """Initialize rotary encoder and its push button."""
+        """Initialize rotary encoder and its push button.
+
+        Three input decode modes, selected by config:
+
+        - **pulse** (``encoder_pulse_mode = True``): A and B are read as
+          independent active-low pulse inputs. Each falling edge on A bumps
+          position +1; each falling edge on B bumps position -1. Used for
+          devices that emit a single short pulse per step (e.g. sip-n-puff
+          adapters) instead of a quadrature waveform.
+        - **hardware**: rotaryio.IncrementalEncoder. Default when available.
+        - **software**: bit-banged quadrature decode. Fallback when rotaryio
+          can't claim the PIO state machine.
+        """
 
         # Drive GND pin low if configured (uses GPIO as ground for encoder)
         gnd_pin_name = config.get("encoder_gnd_pin")
@@ -193,25 +205,11 @@ class InputManager:
             self._encoder_gnd.direction = digitalio.Direction.OUTPUT
             self._encoder_gnd.value = False
 
-        # Try hardware rotaryio first, fall back to software polling
         self._software_encoder = False
-        try:
-            import rotaryio
-            self._encoder = rotaryio.IncrementalEncoder(
-                _pin(config["encoder_pin_a"]),
-                _pin(config["encoder_pin_b"]),
-            )
-            # Test if it works with a quick read
-            _ = self._encoder.position
-        except Exception:
-            self._encoder = None
+        self._pulse_encoder = bool(config.get("encoder_pulse_mode", False))
 
-        # If rotaryio didn't work or no pull-ups, use software polling
-        if self._encoder is None or gnd_pin_name:
-            # Software encoder needs pull-ups — rotaryio may not set them
-            if self._encoder:
-                self._encoder.deinit()
-            self._software_encoder = True
+        if self._pulse_encoder:
+            # Pulse mode — independent active-low edge inputs on A and B.
             self._enc_a = digitalio.DigitalInOut(_pin(config["encoder_pin_a"]))
             self._enc_a.direction = digitalio.Direction.INPUT
             self._enc_a.pull = digitalio.Pull.UP
@@ -220,11 +218,42 @@ class InputManager:
             self._enc_b.pull = digitalio.Pull.UP
             self._enc_last_a = self._enc_a.value
             self._enc_last_b = self._enc_b.value
-            # Create a simple position tracker
-            class SoftEncoder:
+            class PulseEncoder:
                 def __init__(self):
                     self.position = 0
-            self._encoder = SoftEncoder()
+            self._encoder = PulseEncoder()
+        else:
+            # Try hardware rotaryio first, fall back to software polling
+            try:
+                import rotaryio
+                self._encoder = rotaryio.IncrementalEncoder(
+                    _pin(config["encoder_pin_a"]),
+                    _pin(config["encoder_pin_b"]),
+                )
+                # Test if it works with a quick read
+                _ = self._encoder.position
+            except Exception:
+                self._encoder = None
+
+            # If rotaryio didn't work or no pull-ups, use software polling
+            if self._encoder is None or gnd_pin_name:
+                # Software encoder needs pull-ups — rotaryio may not set them
+                if self._encoder:
+                    self._encoder.deinit()
+                self._software_encoder = True
+                self._enc_a = digitalio.DigitalInOut(_pin(config["encoder_pin_a"]))
+                self._enc_a.direction = digitalio.Direction.INPUT
+                self._enc_a.pull = digitalio.Pull.UP
+                self._enc_b = digitalio.DigitalInOut(_pin(config["encoder_pin_b"]))
+                self._enc_b.direction = digitalio.Direction.INPUT
+                self._enc_b.pull = digitalio.Pull.UP
+                self._enc_last_a = self._enc_a.value
+                self._enc_last_b = self._enc_b.value
+                # Create a simple position tracker
+                class SoftEncoder:
+                    def __init__(self):
+                        self.position = 0
+                self._encoder = SoftEncoder()
 
         self._last_encoder_pos = self._encoder.position
         btn_pin = _pin(config.get("encoder_button_pin"))
@@ -233,7 +262,12 @@ class InputManager:
             self._encoder_button.direction = digitalio.Direction.INPUT
             self._encoder_button.pull = digitalio.Pull.UP
             self._last_encoder_button = self._encoder_button.value
-        mode = "software" if self._software_encoder else "hardware"
+        if self._pulse_encoder:
+            mode = "pulse"
+        elif self._software_encoder:
+            mode = "software"
+        else:
+            mode = "hardware"
         print("Encoder ready: nav={} pos={} max={} mode={}".format(
             self._encoder_nav, self._last_encoder_pos, self._max_index, mode))
 
@@ -562,6 +596,20 @@ class InputManager:
         """
         if self._encoder is None:
             return None
+
+        # Pulse mode — independent active-low edge inputs on A and B.
+        # Each falling edge on A bumps position +1; on B bumps -1.
+        if self._pulse_encoder:
+            a = self._enc_a.value
+            b = self._enc_b.value
+            if a != self._enc_last_a:
+                if not a:                       # falling edge
+                    self._encoder.position += 1
+                self._enc_last_a = a
+            if b != self._enc_last_b:
+                if not b:                       # falling edge
+                    self._encoder.position -= 1
+                self._enc_last_b = b
 
         # Update software encoder — lookup table approach
         # Tracks all 4 state transitions, only counts valid sequences
