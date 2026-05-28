@@ -578,7 +578,225 @@ VARIANTS = {
         "sleep_mode": "software_idle",
         "sleep_wake_pins": [],
     },
+
+    "FRUITJAM_DVI_ENC": {
+        "name": "FRUITJAM_DVI_ENC",
+
+        # Display — onboard DVI/HDMI output, 320x240 fb -> 640x480 HDMI.
+        # See FRUITJAM_DVI_KBD for the bring-up sequence rationale.
+        "display_type": "FRUITJAM_DVI",
+        "screen_width": 320,
+        "screen_height": 240,
+        "framebuffer_pixel_scale": 2,
+        "framebuffer_color_depth": 16,
+        "display_rotation": 0,
+        "display_inverted": False,
+        "background_image": "/menus/images/needs_small.bmp",
+        "start_menu": "base_moana.menu",
+        "lcd_cs": None,
+        "lcd_dc": None,
+        "lcd_sclk": None,
+        "lcd_mosi": None,
+        "lcd_miso": None,
+        "lcd_backlight": None,
+        "lcd_reset": None,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals.
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "dac_volume": -10,
+        "speaker_volume": 0,
+        "speaker_gain": 24,
+        "headphone_volume": 0,
+        "headphone_left_gain": 9,
+        "headphone_right_gain": 9,
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.5,
+        "headset_debounce": 1.0,
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        "full_power_pin": None,
+        "full_power_active_low": False,
+        "full_power_settle_ms": 0,
+        "periph_reset_pin": "PERIPH_RESET",
+
+        # SD card — enabled, content overrides flash.
+        "sd_card": True,
+        "sd_cs": "SD_CS",
+        "sd_sclk": "SD_SCK",
+        "sd_mosi": "SD_MOSI",
+        "sd_miso": "SD_MISO",
+        "sd_shares_display_spi": False,
+
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        "touch_screen": False,
+
+        # USB HID keyboard kept for digit-key cell selection (1..8).
+        "input_type": "USB_HID_KEYBOARD",
+        "usb_host_dp": "USB_HOST_DATA_PLUS",
+        "usb_host_dm": "USB_HOST_DATA_MINUS",
+        "usb_host_5v_power": "USB_HOST_5V_POWER",
+
+        # Direct buttons OFF — BUTTON1/BUTTON2/BUTTON3 GPIOs are repurposed
+        # as the rotary encoder. Same physical hardware, different reading
+        # mode: BUTTON1 = encoder A, BUTTON2 = encoder B, BUTTON3 = click.
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "direct_buttons_active_low": True,
+
+        # Rotary encoder — drives the language switcher overlay. Encoder
+        # navigation is FALSE so rotation doesn't move a menu highlight
+        # (we want it to open the language picker instead).
+        "rotary_encoder": True,
+        "encoder_navigation": False,
+        "encoder_pin_a": "BUTTON1",
+        "encoder_pin_b": "BUTTON2",
+        "encoder_button_pin": "BUTTON3",
+        "encoder_button_index": 0,
+
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+
+        # Peripherals already owns the onboard 5-pixel strip — leave None
+        # so Machine doesn't try to re-claim board.NEOPIXEL.
+        "neopixel_pin": None,
+        "neopixel_count": 0,
+
+        # 4x2 = 8 cells, mapped 1:1 to keypad keys 1..8.
+        "button_cols": 4,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Sleep — software idle (RP2350B has no alarm module).
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+
+        # Multi-lingual: matches the CYD_PLUS asset layout the subprogram
+        # already expects (/lang_images/lang_<code>.bmp, /menus/lang_<code>.menu,
+        # /button_sounds/languages/<code>/*.wav).
+        "language_switcher_enabled": True,
+    },
+
+    "FRUITJAM_LCD_28": {
+        "name": "FRUITJAM_LCD_28",
+
+        # Display — 2.8" 320x240 ILI9341 SPI on the Fruit Jam daughterboard.
+        # Same daughterboard socket pinout as FRUITJAM_V2 (which used the
+        # 1.77" ST7735R) — only the controller and resolution differ.
+        "display_type": "ILI9341",
+        "screen_width": 320,
+        "screen_height": 240,
+        "display_rotation": 0,            # flip if image is upside-down
+        "display_inverted": False,        # set True if IPS panel (colors inverted)
+        "background_image": None,         # menu provides background
+        "start_menu": "base_moana.menu",
+        "lcd_cs": "A3",
+        "lcd_dc": "A2",
+        "lcd_sclk": "SCK",
+        "lcd_mosi": "MOSI",
+        "lcd_miso": "MISO",
+        "lcd_backlight": None,            # backlight on 3V3_SWITCHED rail
+        "lcd_reset": "A1",
+        "spi_baudrate": 24_000_000,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals.
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "dac_volume": -10,
+        "speaker_volume": 0,
+        "speaker_gain": 24,
+        "headphone_volume": 0,
+        "headphone_left_gain": 9,
+        "headphone_right_gain": 9,
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.5,
+        "headset_debounce": 1.0,
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # FULL_POWER — gates 3V3_SWITCHED rail (LCD VCC, IOVCC, backlight).
+        # Active low: LOW = power on, HIGH = power off. Same as FRUITJAM_V2.
+        "full_power_pin": "A4",
+        "full_power_active_low": True,
+        "full_power_settle_ms": 100,
+
+        # Peripherals reset — must be HIGH for DAC operation.
+        "periph_reset_pin": "PERIPH_RESET",
+
+        # SD card — daughterboard doesn't expose one.
+        "sd_card": False,
+        "sd_cs": None,
+        "sd_sclk": None,
+        "sd_mosi": None,
+        "sd_miso": None,
+        "sd_shares_display_spi": False,
+
+        # I2C (DAC + headset detect).
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        # No touch screen on this build.
+        "touch_screen": False,
+
+        # USB HID keyboard via the Fruit Jam USB host port.
+        # Requires /boot.py with usb_host.Port().
+        "input_type": "USB_HID_KEYBOARD",
+        "usb_host_dp": "USB_HOST_DATA_PLUS",
+        "usb_host_dm": "USB_HOST_DATA_MINUS",
+        "usb_host_5v_power": "USB_HOST_5V_POWER",
+
+        # Onboard tactile buttons — daughterboard doesn't route them.
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "direct_buttons_active_low": True,
+
+        # Rotary encoder on the daughterboard at D8/D9/D10 (same as FRUITJAM_V2).
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "D8",
+        "encoder_pin_b": "D9",
+        "encoder_button_pin": "D10",
+        "encoder_button_index": 0,
+
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+
+        # NeoPixel — Peripherals owns the onboard strip; leave None so
+        # Machine doesn't try to re-claim board.NEOPIXEL.
+        "neopixel_pin": None,
+        "neopixel_count": 0,
+
+        # 4x2 = 8 cells, mapped 1:1 to keypad keys 1..8.
+        "button_cols": 4,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Sleep — software idle (RP2350B has no alarm module).
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+
+        "language_switcher_enabled": True,
+    },
 }
 
 # Change this single line to switch machine variant
-DEFAULT_VARIANT = "FRUITJAM_V2"
+DEFAULT_VARIANT = "FRUITJAM_LCD_28"
