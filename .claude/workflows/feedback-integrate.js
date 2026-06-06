@@ -110,7 +110,7 @@ const ANALYSIS_SCHEMA = {
   properties: {
     theme_id: { type: 'string' },
     title: { type: 'string' },
-    category: { type: 'string', enum: ['wording', 'product', 'config', 'out_of_scope'] },
+    category: { type: 'string', enum: ['wording', 'product', 'config', 'meta', 'out_of_scope'] },
     scope: { type: 'string', enum: ['variant', 'shared'], description: 'shared = applies across all devices' },
     rationale: { type: 'string' },
     affected_docs: {
@@ -270,7 +270,7 @@ ${SHARED_BASE_DOCS.map((d) => '  - ' + d).join('\n')}
 
 Steps:
 1. Read the relevant doc(s).
-2. Classify the theme as exactly one of: "wording" / "product" / "config" / "out_of_scope".
+2. Classify the theme as exactly one of: "wording" / "product" / "config" / "meta" / "out_of_scope". Use "meta" for feedback ABOUT THE FORM ITSELF (the "what can we do to make this form better?" question) — those edits target docs/feedback/questions.json, not the device docs.
 3. Set scope: "shared" if the change belongs in a shared doc (applies to all devices), else "variant".
 4. List which doc(s) it affects and why.
 5. If it implies doc text changes, draft concrete proposed edits (path, location hint, current-text excerpt, proposed replacement, one-line summary). Keep the project's voice.
