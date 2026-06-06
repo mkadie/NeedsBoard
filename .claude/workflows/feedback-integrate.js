@@ -33,18 +33,18 @@ const VARIANTS = {
 
   'sip-and-puff': {
     displayName: 'Sip-and-Puff (breath-controlled)',
-    // NOTE: SipNPuff lives in a separate repo (mkadie/SipNPuff). These fields
-    // are a scaffold — CONFIRM before the first real run.
+    // Base docs default to this repo (NeedsBoard); the related repo is SipNPuff.
     doc: 'TODO: sip-and-puff variant doc (not yet written)',
     formFile: 'docs/feedback/form-sip-and-puff.md',
-    baseDocs: ['TODO: SipNPuff doc paths reachable from the run directory'],
+    relatedRepo: 'https://github.com/mkadie/SipNPuff',
+    baseDocs: ['custom_processor_description.md', 'README.md'],
     audienceNote:
-      'Users have limited mobility/strength; may be verbal or non-verbal. Caregivers often co-configure. CONFIRM specifics with the community.',
+      'Both the person who uses the device AND caregivers fill out feedback. Users have limited mobility/strength and may be verbal or non-verbal.',
     terminologyRules:
-      'CONFIRM the community-preferred terms before finalizing — do NOT invent a label (the way "involuntary non-verbal" came from talking to people). Default to respectful, person-led language; avoid "wheelchair-bound", "suffers from", "confined to".',
+      'Do NOT invent or assume a label. The community-preferred terms are being gathered from the form (Question 1). Until confirmed, default to respectful, person-led language and avoid "wheelchair-bound", "suffers from", "confined to". Flag any wording that presumes a term.',
     philosophyGuardrail:
       'Safety and reliability come first: this input modality is on the medical-grade path (IEC 62304 / FDA Class II direction). Reject changes that compromise per-user calibration, redundant pressure sensing, or the safety MCU. This variant is NOT bound by the MVP "minimum" philosophy.',
-    status: 'scaffold — needs confirmation',
+    status: 'draft — terminology being gathered via the form',
   },
 }
 
