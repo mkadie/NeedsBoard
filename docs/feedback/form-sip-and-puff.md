@@ -40,9 +40,15 @@ Variant id: `sip-and-puff`. Built from [`FORM_TEMPLATE.md`](./FORM_TEMPLATE.md).
 
 4. **Do we need an emergency message — and if so, how would you like to initiate
    it?** *(product / config)*
-   > For example: a long puff, a sip-puff-sip pattern, a dedicated switch, a dwell.
-   > Tell us whether it's useful at all, and what would be reachable for you in a
-   > crisis.
+   > Why we ask: on the involuntary non-verbal device, an emergency message exists
+   > for the moments a person freezes and can't speak — one button plays *"Please
+   > stand back. I cannot speak right now, but I am OK. Crowding me makes it worse."*
+   > so it explains the situation to the people around them when they can't. We
+   > don't know whether that same need applies to you — that's what we're asking.
+   >
+   > If it's useful, how would you initiate it? For example: a long puff, a
+   > sip-puff-sip pattern, a dedicated switch, or a dwell. Tell us what would be
+   > reachable for you in a crisis.
 
 5. **What would make a device feel safe to use in public — and what would make it
    worse?** *(product)*
