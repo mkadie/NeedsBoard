@@ -11,6 +11,11 @@ Both are produced by the `feedback-integrate` workflow: each `product` or
 feedback that prompted it. Wording-only feedback goes straight to doc PRs, not
 here.
 
+The workflow is **variant-aware**: every issue and backlog row is prefixed with
+its variant (e.g. `[Involuntary Non-Verbal (MVP)]`, `[Sip-and-Puff]`, or
+`[shared]` for cross-device items). GitHub issues should also carry a
+`variant:<id>` label.
+
 ## How a row gets here
 
 ```
@@ -26,9 +31,9 @@ belongs on a carrier board, not the core module — such items are marked
 
 ## Backlog
 
-| Priority | Scope | Item | From feedback | Issue |
-|----------|-------|------|---------------|-------|
-| _(none yet — first batch pending)_ | | | | |
+| Priority | Variant | Scope | Item | From feedback | Issue |
+|----------|---------|-------|------|---------------|-------|
+| _(none yet — first batch pending)_ | | | | | |
 
 ## Done
 
