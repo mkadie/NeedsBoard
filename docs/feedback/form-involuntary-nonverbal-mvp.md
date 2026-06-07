@@ -5,6 +5,8 @@ Variant id: `involuntary-nonverbal-mvp`. **Generated from [`questions.json`](./q
 ## Intro text
 
 > We're building this device *with* you, not just for you. There are no wrong answers, nothing is required, and you can stay completely anonymous. Tell us as much or as little as you like — even one sentence helps the people who come after you.
+>
+> 📄 [New here? Read about this device](https://github.com/mkadie/NeedsBoard/blob/main/involuntary_nonverbal_mvp.md)
 
 ## Questions
 

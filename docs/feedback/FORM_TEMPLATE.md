@@ -50,6 +50,8 @@ question on every form) — it improves `questions.json`, not the device docs.
 ```jsonc
 "variant-id": {
   "title": "Display name",
+  "docUrl": "https://…",             // link to this device's documentation,
+                                     //   shown in the intro of every form
   "status": "DRAFT",                 // optional; shown in the heading
   "statusBanner": "…",               // optional blockquote under the heading
   "preamble": "## Section\n…",        // optional markdown before the questions
@@ -58,4 +60,6 @@ question on every form) — it improves `questions.json`, not the device docs.
 }
 ```
 
-`alwaysInclude` questions are appended after `order` on every form.
+`alwaysInclude` questions are appended after `order` on every form. The
+top-level `docLinkLabel` sets the link text used for every variant's `docUrl`
+(e.g. "New here? Read about this device").

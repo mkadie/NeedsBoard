@@ -3,6 +3,8 @@
 
   "intro": "We're building this device *with* you, not just for you. There are no wrong answers, nothing is required, and you can stay completely anonymous. Tell us as much or as little as you like — even one sentence helps the people who come after you.",
 
+  "docLinkLabel": "New here? Read about this device",
+
   "alwaysInclude": ["form_feedback", "stay_in_touch"],
 
   "questions": {
@@ -100,6 +102,7 @@
   "variants": {
     "involuntary-nonverbal-mvp": {
       "title": "Involuntary Non-Verbal (MVP)",
+      "docUrl": "https://github.com/mkadie/NeedsBoard/blob/main/involuntary_nonverbal_mvp.md",
       "order": ["describes_you", "need_to_say", "emergency_mvp", "public_safe", "doc_wrong", "whats_missing", "trigger", "pocket_use", "anything_else"],
       "optionOverrides": {
         "describes_you": ["I experience involuntary non-verbal moments myself", "Family member / friend", "Teacher / aide", "Speech, occupational, or mental-health professional", "Other"]
@@ -107,6 +110,7 @@
     },
     "sip-and-puff": {
       "title": "Sip-and-Puff (breath-controlled)",
+      "docUrl": "https://github.com/mkadie/SipNPuff",
       "status": "DRAFT",
       "statusBanner": "**Status: draft.** The terminology and emergency-message questions are intentionally open — we're asking the community rather than assuming. Confirm the base-doc set before the first real workflow run.",
       "preamble": "## Resolved setup\n\n- **Terminology:** unknown on purpose — captured as Question 1 below.\n- **Who fills it:** both the person who uses the device and caregivers.\n- **Base docs:** default to this repo (`mkadie/NeedsBoard`); link out to the relevant repo, [`mkadie/SipNPuff`](https://github.com/mkadie/SipNPuff), as its docs become canonical.",
