@@ -57,6 +57,9 @@ not just *for* it.
 - **Speaks your phrases.** Load the things you most often need to say but can't
   always get out — *"Yes," "No," "I need a minute," "Can you write it down?",*
   whatever your moments actually call for — and reach them in a press or two.
+- **Yours to operate.** You choose the phrases, you decide when it speaks, you
+  carry it. Unlike the variants set up by a caregiver, this one needs no one
+  standing next to you for it to work.
 - **Has an emergency message.** Hold the button and it plays a phrase that
   explains the situation to the people around you when you can't:
   > *"Please stand back. I cannot speak right now, but I am OK. Crowding me
