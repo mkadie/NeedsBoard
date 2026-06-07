@@ -42,7 +42,10 @@ function buildForm() {
   }
 
   const form = FormApp.create('T-Rex Talk — ' + variant.title + ' feedback');
-  form.setDescription(reg.intro + '\n\nAnonymous. Everything is optional.');
+  let desc = reg.intro;
+  if (variant.docUrl) desc += '\n\n' + (reg.docLinkLabel || 'Read about this device') + ': ' + variant.docUrl;
+  desc += '\n\nAnonymous. Everything is optional.';
+  form.setDescription(desc);
   form.setCollectEmail(false);
   form.setLimitOneResponsePerUser(false);
   form.setProgressBar(false);

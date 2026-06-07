@@ -69,6 +69,7 @@ const html = `<!doctype html>
   body{font:18px/1.5 system-ui,"Segoe UI",Roboto,Arial,sans-serif;color:var(--fg);background:var(--bg);max-width:720px;margin:0 auto;padding:1.25rem}
   h1{font-size:1.5rem}
   .intro{background:#f3f6ff;border-left:4px solid var(--focus);padding:.75rem 1rem;border-radius:6px}
+  .doclink{margin:.4rem 0 1rem;font-weight:600}
   fieldset.q,.q.field{border:1px solid var(--line);border-radius:8px;padding:1rem;margin:1rem 0}
   legend,label{font-weight:600}
   .cat{font-weight:400;color:var(--muted);font-size:.85em}
@@ -84,6 +85,7 @@ const html = `<!doctype html>
 <body>
 <h1>${esc(variant.title)} — feedback</h1>
 <p class="intro">${mdLite(reg.intro)}<br><strong>Anonymous. Everything is optional.</strong></p>
+${variant.docUrl ? `<p class="doclink">📄 <a href="${esc(variant.docUrl)}">${esc(reg.docLinkLabel || 'Read about this device')}</a></p>` : ''}
 <form action="${esc(endpoint)}" method="POST">
   <input type="hidden" name="variant" value="${esc(variantId)}">
 ${body}  <button type="submit">Send feedback</button>
