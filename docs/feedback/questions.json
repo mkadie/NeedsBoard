@@ -1,0 +1,119 @@
+{
+  "_comment": "Canonical question registry for all device feedback forms. Edit this file, then run `node docs/feedback/build-forms.js` to regenerate the form-*.md files. To add a question to EVERY form, add its id to `alwaysInclude`. To add a shared body question, define it in `questions` and reference its id in each variant's `order`. Variant-specific questions live in `questions` too and are referenced only by that variant's `order`.",
+
+  "intro": "We're building this device *with* you, not just for you. There are no wrong answers, nothing is required, and you can stay completely anonymous. Tell us as much or as little as you like — even one sentence helps the people who come after you.",
+
+  "alwaysInclude": ["form_feedback", "stay_in_touch"],
+
+  "questions": {
+    "terminology": {
+      "category": "context",
+      "type": "text",
+      "text": "What words should we use for you and this community?",
+      "help": "We honestly don't know the language this community prefers for itself, and we don't want to guess or put words in your mouth. What do you call it? What language would you like us to use — and what should we never use?"
+    },
+    "describes_you": {
+      "category": "context",
+      "type": "single",
+      "text": "Which best describes you?",
+      "options": ["I use this device myself", "Family member / friend", "Teacher / aide", "Speech, occupational, or mental-health professional", "Other"]
+    },
+    "need_to_say": {
+      "category": "product / wording",
+      "type": "text",
+      "text": "When your words won't come, what do you most need to be able to say?",
+      "help": "Examples welcome: \"I need a minute,\" \"Can you write it down?\", \"I'm OK.\""
+    },
+    "need_to_do": {
+      "category": "product / wording",
+      "type": "text",
+      "text": "When you can't operate a standard device, what do you most need to be able to do or say?"
+    },
+    "emergency_mvp": {
+      "category": "wording",
+      "type": "text",
+      "text": "The emergency message currently says: \"Please stand back. I cannot speak right now, but I am OK. Crowding me makes it worse. Thank you.\" Does this wording work for you? What would you change?"
+    },
+    "emergency_signal": {
+      "category": "product / config",
+      "type": "text",
+      "text": "Do we need an emergency message — and if so, how would you like to initiate it?",
+      "help": "Why we ask: on the involuntary non-verbal device, an emergency message exists for the moments a person freezes and can't speak — one button plays *\"Please stand back. I cannot speak right now, but I am OK. Crowding me makes it worse.\"* so it explains the situation to the people around them when they can't. We don't know whether that same need applies to you — that's what we're asking.\n\nIf it's useful, how would you initiate it? For example: a long puff, a sip-puff-sip pattern, a dedicated switch, or a dwell. Tell us what would be reachable for you in a crisis."
+    },
+    "public_safe": {
+      "category": "product",
+      "type": "text",
+      "text": "What would make a device feel safe to use in public — and what would make it worse?"
+    },
+    "doc_wrong": {
+      "category": "wording",
+      "type": "text",
+      "text": "Is anything in the documentation wrong, confusing, or not true to your experience?"
+    },
+    "whats_missing": {
+      "category": "product",
+      "type": "text",
+      "text": "What's missing? What do you wish it did?"
+    },
+    "anything_else": {
+      "category": "context",
+      "type": "text",
+      "text": "Anything else you want us to know?"
+    },
+    "form_feedback": {
+      "category": "meta",
+      "type": "text",
+      "text": "What can we do to make this feedback form better for this device?",
+      "help": "Be honest — is anything confusing, too long, missing, or worded in a way that doesn't fit you or this device? This question is about the form itself, so we can keep improving how we ask."
+    },
+    "stay_in_touch": {
+      "category": "context",
+      "type": "contact",
+      "text": "Optional — stay in touch.",
+      "options": ["Add me to the mailing list for updates", "I'd like to join the test group"]
+    },
+
+    "trigger": {
+      "category": "config / product",
+      "type": "multi",
+      "text": "How would you most want to trigger it?",
+      "options": ["A dial you turn and press (the default)", "A touch screen", "One big button", "Something else: ____"]
+    },
+    "pocket_use": {
+      "category": "product / config",
+      "type": "text",
+      "text": "It's meant to live in a pocket and be used now and then, not all day. Does that match how you'd use it?"
+    },
+    "control_today": {
+      "category": "product / config",
+      "type": "text",
+      "text": "How do you control the device today (straw / sip-puff, head movement, switch, other), and how well does it work?"
+    },
+    "calibration": {
+      "category": "config",
+      "type": "text",
+      "text": "How easy is it to calibrate the sip/puff sensitivity for you, and does it drift over a day?",
+      "help": "Calibration is on the medical-grade reliability path; this directly drives the product."
+    }
+  },
+
+  "variants": {
+    "involuntary-nonverbal-mvp": {
+      "title": "Involuntary Non-Verbal (MVP)",
+      "order": ["describes_you", "need_to_say", "emergency_mvp", "public_safe", "doc_wrong", "whats_missing", "trigger", "pocket_use", "anything_else"],
+      "optionOverrides": {
+        "describes_you": ["I experience involuntary non-verbal moments myself", "Family member / friend", "Teacher / aide", "Speech, occupational, or mental-health professional", "Other"]
+      }
+    },
+    "sip-and-puff": {
+      "title": "Sip-and-Puff (breath-controlled)",
+      "status": "DRAFT",
+      "statusBanner": "**Status: draft.** The terminology and emergency-message questions are intentionally open — we're asking the community rather than assuming. Confirm the base-doc set before the first real workflow run.",
+      "preamble": "## Resolved setup\n\n- **Terminology:** unknown on purpose — captured as Question 1 below.\n- **Who fills it:** both the person who uses the device and caregivers.\n- **Base docs:** default to this repo (`mkadie/NeedsBoard`); link out to the relevant repo, [`mkadie/SipNPuff`](https://github.com/mkadie/SipNPuff), as its docs become canonical.",
+      "order": ["terminology", "describes_you", "need_to_do", "emergency_signal", "public_safe", "doc_wrong", "whats_missing", "control_today", "calibration", "anything_else"],
+      "optionOverrides": {
+        "describes_you": ["I use a sip-and-puff / breath-controlled device myself", "Family member / caregiver who helps set it up", "Teacher / aide", "Speech, occupational, or mental-health professional", "Other"]
+      }
+    }
+  }
+}
