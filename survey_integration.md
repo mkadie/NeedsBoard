@@ -74,13 +74,18 @@ Zero backend. The form auto-creates a Google Sheet of responses.
 Use the Apps Script in [`survey/build-google-form.gs`](./survey/build-google-form.gs):
 
 1. Go to <https://script.google.com> → New project. Paste the script.
-2. Set `VARIANT_ID` at the top (e.g. `'involuntary-nonverbal-mvp'`).
+2. Set `VARIANT_ID` at the top (e.g. `'involuntary-nonverbal-mvp'`); leave
+   `FORM_ID` blank.
 3. Run `buildForm()`. Authorize when prompted.
 4. The Execution log prints the Form's **published URL**, **edit URL**, and the
    linked **Sheet URL**. The form is built entirely from the live questions.json.
 
-Re-run it whenever questions.json changes to rebuild the form (or hand-edit the
-Google Form for small tweaks — but prefer regenerating to stay in sync).
+**Refreshing later (in place):** to push question/intro changes to the form you
+already embedded — without creating a duplicate — paste its id into `FORM_ID`
+(from the edit URL `.../forms/d/<FORM_ID>/edit`) and run `buildForm()` again. It
+rewrites the same form, so the tssfaa.com embed updates with no re-embed. (For a
+one-line tweak like adding the doc link, just edit the form's description by hand
+— that leaves the responses Sheet untouched.)
 
 > Prefer not to script it? You can build the Google Form by hand from the
 > `form-<variant>.md` preview — but the script keeps it in sync for free.
