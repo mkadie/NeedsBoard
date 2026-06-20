@@ -4,12 +4,22 @@
  * Builds a Google Form for one device variant DIRECTLY from the canonical
  * questions.json in mkadie/NeedsBoard, and links it to a responses Sheet.
  *
- * Setup:
+ * Setup (first time — create a new form):
  *   1. https://script.google.com -> New project -> paste this file.
- *   2. Set VARIANT_ID below.
+ *   2. Set VARIANT_ID below; leave FORM_ID blank.
  *   3. Run buildForm(). Authorize when prompted.
  *   4. Read the Execution log for the published URL, edit URL, and Sheet URL.
  *      Embed the form on the static site via Send -> <> (iframe).
+ *
+ * Refresh later (UPDATE the existing form in place — keeps its URL, embed, and
+ * responses Sheet):
+ *   - Paste the form's id into FORM_ID (from the edit URL:
+ *     https://docs.google.com/forms/d/<FORM_ID>/edit), then run buildForm().
+ *     It rewrites the title, description (incl. doc link), and questions on the
+ *     SAME form, so the tssfaa.com embed updates automatically — no re-embed.
+ *   - Caveat: a full question rebuild can add columns to the responses Sheet for
+ *     historical responses. For a tiny tweak (e.g. just the doc link), editing
+ *     the form's description by hand is simpler and leaves the Sheet untouched.
  *
  * To export a batch of responses for the feedback-integrate workflow:
  *   - paste the responses Sheet URL into RESPONSES_SHEET_URL, run exportBatch(),
@@ -18,6 +28,7 @@
 
 const QUESTIONS_URL = 'https://raw.githubusercontent.com/mkadie/NeedsBoard/main/docs/feedback/questions.json';
 const VARIANT_ID = 'involuntary-nonverbal-mvp';
+const FORM_ID = '';             // blank = create a new form; set to update an existing form in place
 const RESPONSES_SHEET_URL = ''; // paste after buildForm() logs it, then run exportBatch()
 
 function loadRegistry_() {
@@ -41,7 +52,17 @@ function buildForm() {
     throw new Error('Unknown variant "' + VARIANT_ID + '". Known: ' + Object.keys(reg.variants).join(', '));
   }
 
-  const form = FormApp.create('T-Rex Talk — ' + variant.title + ' feedback');
+  const updating = !!FORM_ID;
+  let form;
+  if (updating) {
+    form = FormApp.openById(FORM_ID);          // update the existing form in place
+    const items = form.getItems();
+    for (let i = items.length - 1; i >= 0; i--) form.deleteItem(items[i]); // clear old questions
+  } else {
+    form = FormApp.create('T-Rex Talk — ' + variant.title + ' feedback');
+  }
+
+  form.setTitle('T-Rex Talk — ' + variant.title + ' feedback');
   let desc = reg.intro;
   if (variant.docUrl) desc += '\n\n' + (reg.docLinkLabel || 'Read about this device') + ': ' + variant.docUrl;
   desc += '\n\nAnonymous. Everything is optional.';
@@ -57,13 +78,18 @@ function buildForm() {
     addItem_(form, q, opts);
   });
 
-  const ss = SpreadsheetApp.create('T-Rex Talk feedback — ' + variant.title);
-  form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
+  if (!updating) {
+    const ss = SpreadsheetApp.create('T-Rex Talk feedback — ' + variant.title);
+    form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
+    Logger.log('Responses Sheet: ' + ss.getUrl());
+  } else {
+    Logger.log('Updated existing form in place — responses Sheet and embed unchanged.');
+  }
 
+  Logger.log((updating ? 'Updated' : 'Created') + ' form.');
   Logger.log('Published URL : ' + form.getPublishedUrl());
   Logger.log('Edit URL      : ' + form.getEditUrl());
-  Logger.log('Responses Sheet: ' + ss.getUrl());
-  Logger.log('Embed: open the edit URL, Send -> <> to copy the iframe.');
+  if (!updating) Logger.log('Embed: open the edit URL, Send -> <> to copy the iframe.');
 }
 
 function addItem_(form, q, opts) {
