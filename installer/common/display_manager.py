@@ -4,6 +4,7 @@ Handles display initialization, background image loading,
 and screen-coordinate-to-button-grid mapping.
 """
 
+import time
 import displayio
 import fourwire
 import busio
@@ -480,6 +481,33 @@ class DisplayManager:
         else:
             self.refresh()
         self.set_backlight(True)
+
+    def rebuild(self):
+        """Re-initialise the panel after it has lost power.
+
+        Sleep can cut the rail that feeds the display, which leaves the
+        controller unconfigured -- its registers and RAM are gone, and
+        re-sending pixels to it achieves nothing. Building a fresh driver
+        and re-attaching the existing groups brings the screen back without
+        rebooting the board, which is what the old wake path resorted to.
+
+        No-op on text-mode displays, which are not on a switched rail.
+        """
+        if self._text_mode or self._display is None:
+            return False
+        try:
+            displayio.release_displays()
+            time.sleep(0.1)
+            # Hand back the existing SPI bus: it survives the rail cut (the
+            # MCU pins never lost power), and re-claiming SCK/MOSI/MISO
+            # would collide with the bus this object already holds.
+            self._init_spi_display(self._config, self._spi)
+            self._display.root_group = self._splash
+            print("Display: rebuilt after power loss")
+            return True
+        except Exception as e:
+            print("Display: rebuild failed:", type(e).__name__, e)
+            return False
 
     def _show_blank(self):
         """Put a full-screen black bitmap up, so the panel reads as off."""

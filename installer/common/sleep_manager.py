@@ -217,27 +217,31 @@ class SleepManager:
 
         print("Sleep: entering software idle...")
 
-        # Heavy: deinit Peripherals, cut FULL_POWER, reset on wake.
-        # Light: blank the panel and keep running.
+        # Whether the FULL_POWER rail may be dropped. Cutting it is what
+        # actually darkens a screen whose backlight has no pin of its own --
+        # blanking pixels leaves the backlight burning.
         #
-        # The choice is derived, not declared, because the failure it guards
-        # against is not obvious from a variant file: if the FULL_POWER rail
-        # also feeds the wake inputs, cutting it kills the very hardware that
-        # has to notice the wake, and the board never comes back. Variants
-        # state the board fact (full_power_feeds_inputs); the policy lives
-        # here so a user enabling sleep in config.txt cannot arm it by hand.
-        can_cut_power = (self._peripherals is not None
-                         or self._full_power is not None)
-        if can_cut_power:
-            # Two different boards, two different reasons the rail must stay
-            # up. Each variant states which applies to it.
+        # Derived from board facts rather than declared as a verb, because
+        # the failure it guards is invisible in a variant file: a rail that
+        # feeds the wake inputs takes the wake path down with it, and a rail
+        # that feeds a panel with its own backlight pin need not be cut at
+        # all. The policy lives here so a user enabling sleep from config.txt
+        # cannot arm it by hand.
+        #
+        # Waking no longer resets the board. That was the old "heavy" path,
+        # and repeated resets are how a board ended up sitting in the RP2350
+        # bootloader. The display is rebuilt in place instead -- bench-tested:
+        # the button still registers with the rail down, and the panel
+        # re-initialises after losing power.
+        cut_rail = self._full_power is not None
+        if cut_rail:
             if self._config.get("full_power_feeds_inputs", False):
                 print("Sleep: FULL_POWER feeds the wake inputs — staying powered")
-                can_cut_power = False
+                cut_rail = False
             elif self._config.get("full_power_feeds_display", False):
                 print("Sleep: FULL_POWER feeds the panel — staying powered")
-                can_cut_power = False
-        heavy_sleep = can_cut_power
+                cut_rail = False
+        heavy_sleep = False          # the reset-on-wake path is retired
 
         if heavy_sleep:
             # Heavy path: Fruit Jam — deinit hardware, reset on wake
@@ -259,15 +263,21 @@ class SleepManager:
                     self._full_power.value = self._full_power_active_low
                 print("Sleep: FULL_POWER OFF")
         else:
-            # Light path: blank the panel, keep the board powered so the
-            # wake inputs stay alive. SLPIN drops the ST7735R/ILI9341 to
-            # ~0.1 mA, SSD1306 to ~10 uA. _power_down() handles backlight,
-            # amplifier and NeoPixel where a variant has them (all three are
-            # unwired on the Fruit Jam clone, but the OLED badge uses them).
+            # Blank the panel and turn off whatever has its own pin
+            # (backlight, amplifier, NeoPixel) on variants that wire them.
             self._power_down()
             if self._display:
                 self._display.sleep_display()
-                print("Sleep: display off (light sleep — hardware stays up)")
+                print("Sleep: display off")
+
+            # Then drop the rail, where the board allows it. This is the
+            # only way to darken a backlight that has no pin of its own.
+            if cut_rail:
+                if self._full_power_off_release:
+                    self._full_power.switch_to_input()
+                else:
+                    self._full_power.value = self._full_power_active_low
+                print("Sleep: FULL_POWER OFF (rail down)")
 
         # Poll for wake — declared wake pins, plus encoder rotation.
         print("Sleep: idle, polling for wake...")
@@ -346,8 +356,16 @@ class SleepManager:
             # Heavy wake: full device reset
             self._wake_from_idle()
         else:
-            # Light wake: panel back on, then restore whatever
-            # _power_down() turned off, then reclaim the encoder button.
+            # Wake in place. Rail first: the panel has no power until it is
+            # back, and the controller lost its configuration with it, so the
+            # display is rebuilt rather than merely repainted.
+            if cut_rail and self._full_power:
+                self._full_power.switch_to_output(
+                    value=not self._full_power_active_low)
+                time.sleep(self._full_power_settle_ms / 1000.0)
+                print("Sleep: FULL_POWER ON (rail up)")
+                if self._display:
+                    self._display.rebuild()
             if self._display:
                 self._display.wake_display()
                 print("Sleep: display on")

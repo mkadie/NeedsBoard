@@ -457,9 +457,13 @@ VARIANTS = {
         # The planned MSPM0 input companion joins this list — wire its line
         # active-low open-drain, which is what the poll expects.
         "sleep_wake_pins": ["BUTTON1"],
-        # The D10 rail feeds the encoder and its button, so sleep must not
-        # cut it — doing so removes the only thing that can wake the board.
-        "full_power_feeds_inputs": True,
+        # No full_power_feeds_* fact here: sleep MAY cut this rail.
+        # Measured 2026-09-19 with the rail held down — the encoder button
+        # still registers (it is an MCU pin, not on the rail) and the panel
+        # re-initialises afterwards. The earlier claim that this rail fed the
+        # wake inputs was inferred from a heavy-sleep failure that was really
+        # microcontroller.reset() landing in the bootloader, never measured.
+        # Cutting it is the only way to darken a backlight with no pin.
 
         "language_switcher_enabled": False,
     },
@@ -606,9 +610,9 @@ VARIANTS = {
         "sleep_enabled": False,
         "sleep_timeout": 120,
         "sleep_mode": "software_idle",
-        # Same board as FRUITJAM_CLONE_18, so the same sleep rules.
+        # Same board as FRUITJAM_CLONE_18, so the same sleep rules: the rail
+        # may be cut (the wake button is an MCU pin, measured 2026-09-19).
         "sleep_wake_pins": ["BUTTON1"],
-        "full_power_feeds_inputs": True,
 
         "language_switcher_enabled": False,
     },
