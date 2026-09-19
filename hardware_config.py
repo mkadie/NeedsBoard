@@ -353,8 +353,18 @@ VARIANTS = {
         # screen + optional devices; RELEASE the pin (high-Z) to cut the rail,
         # where an external pull-up holds the load switch off.
         "full_power_pin": "D10",
-        "full_power_active_low": True,
-        "full_power_off_release": True,   # disable by releasing, not driving high
+        # ACTIVE HIGH: drive D10 high to enable the rail, low to cut it.
+        # That is the TPS22917's native polarity (TI: "ON is an active high
+        # switch control input") and it is what the board measures as, with
+        # the bench bypass jumper removed. An earlier note in
+        # documents/tps22917_load_switch_processed.md claimed the design had
+        # been inverted to active-low; that described the jumpered board.
+        # Verified 2026-09-19: the panel lights whenever D10 is HIGH and is
+        # dark whenever it is LOW, regardless of A4.
+        "full_power_active_low": False,
+        # The part has an internal smart pulldown, so releasing would also
+        # disable it -- but TI says ON must not float, so drive it low.
+        "full_power_off_release": False,
         "full_power_settle_ms": 100,
         "periph_reset_pin": None,
 
@@ -511,8 +521,18 @@ VARIANTS = {
         # screen + optional devices; RELEASE the pin (high-Z) to cut the rail,
         # where an external pull-up holds the load switch off.
         "full_power_pin": "D10",
-        "full_power_active_low": True,
-        "full_power_off_release": True,   # disable by releasing, not driving high
+        # ACTIVE HIGH: drive D10 high to enable the rail, low to cut it.
+        # That is the TPS22917's native polarity (TI: "ON is an active high
+        # switch control input") and it is what the board measures as, with
+        # the bench bypass jumper removed. An earlier note in
+        # documents/tps22917_load_switch_processed.md claimed the design had
+        # been inverted to active-low; that described the jumpered board.
+        # Verified 2026-09-19: the panel lights whenever D10 is HIGH and is
+        # dark whenever it is LOW, regardless of A4.
+        "full_power_active_low": False,
+        # The part has an internal smart pulldown, so releasing would also
+        # disable it -- but TI says ON must not float, so drive it low.
+        "full_power_off_release": False,
         "full_power_settle_ms": 100,
         "periph_reset_pin": None,
 
