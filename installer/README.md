@@ -151,6 +151,11 @@ mirrored file is behind), `MISSING` (a shipped module absent from the mirror)
 and `ORPHAN` (a file in `common/` nothing ships any more), and exits non-zero
 for the first two.
 
+The same script also mirrors `menus/` and `button_sounds/` into
+`installer/content/`, which rots for the same reason — it was still shipping
+retired board art after the menu was rebuilt. That mirror uses `--delete`, so
+a renamed icon cannot linger on the card alongside its replacement.
+
 There is currently no CI and no git hook running `--check`, so keeping the
 mirror current is still a manual step — see the note in the PR about replacing
 the committed mirror with a build step.

@@ -2,8 +2,11 @@
 # deploy.sh — Deploy AAC production code to connected devices.
 #
 # Finds all CIRCUITPY drives and deploys the production code.
-# Each device keeps its own config.txt and hardware_config.py
-# DEFAULT_VARIANT setting.
+#
+# Each device keeps its own config.txt (never overwritten once it exists).
+# hardware_config.py IS overwritten, so its DEFAULT_VARIANT is NOT per-device
+# — a device that isn't the default must pin itself with `variant = NAME` in
+# its own config.txt, otherwise this script will retarget it on every deploy.
 #
 # Usage:
 #   ./deploy.sh              # Deploy to all connected devices
@@ -48,6 +51,14 @@ deploy_to() {
         return
     fi
 
+    # An unmounted board leaves its mount point behind as an empty root-owned
+    # directory, which looks like a device but fails the first copy. With
+    # set -e that aborted the whole run before the real board was reached.
+    if [ ! -w "$mount" ]; then
+        echo "  SKIP: $mount is not writable (stale mount point?)"
+        return
+    fi
+
     echo "Deploying to $name ($mount)..."
 
     # Python files
@@ -67,15 +78,14 @@ deploy_to() {
     fi
 
     if [ "$CODE_ONLY" = false ]; then
-        # Menus
+        # Menus, menu images and per-menu sounds, in one copy. images/ and
+        # sounds/ used to be skipped here, which is why every Food/Drink
+        # submenu item was silent: the menu resolves `sound = sounds/food/
+        # x.mp3` to /menus/sounds/food/x.mp3, and that tree never reached
+        # the device at all.
         mkdir -p "$mount/menus"
-        cp "$SCRIPT_DIR"/menus/*.menu "$mount/menus/" 2>/dev/null || true
-        echo "  Menu files deployed"
-
-        # Menu images (if they exist on device)
-        if [ -d "$mount/menus/images" ]; then
-            echo "  Menu images preserved (existing)"
-        fi
+        cp -r "$SCRIPT_DIR/menus/." "$mount/menus/"
+        echo "  Menus, images and sounds deployed"
 
         # Button sounds
         mkdir -p "$mount/button_sounds"
@@ -94,6 +104,16 @@ echo "=============================================="
 echo "AAC Device — Deploy Production Code"
 echo "=============================================="
 echo ""
+
+if [ "$CODE_ONLY" = false ]; then
+    if ! python3 "$SCRIPT_DIR/check_menus.py"; then
+        echo ""
+        echo "ABORT: a menu references assets that do not exist."
+        echo "On the device this fails silently -- the cell just does nothing."
+        exit 1
+    fi
+    echo ""
+fi
 
 if [ -z "$TARGET" ] || [ "$TARGET" = "fruitjam" ]; then
     deploy_to "/media/$USER/CIRCUITPY" "Fruit Jam"
