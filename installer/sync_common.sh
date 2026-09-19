@@ -1,8 +1,9 @@
 #!/bin/bash
 # sync_common.sh — mirror the live source tree into installer/common/.
 #
-# installer/common/ is copied verbatim onto the device, so it IS the shipped
-# code for SD-card installs. See "Keeping common/ current" in README.md.
+# installer/common/ and installer/content/ are copied verbatim onto the
+# device, so they ARE the shipped code and assets for SD-card installs.
+# See "Keeping common/ current" in README.md.
 #
 #   ./installer/sync_common.sh           # sync, then report
 #   ./installer/sync_common.sh --check   # report only, non-zero if stale
@@ -11,6 +12,7 @@ set -eu
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 COMMON_DIR="$REPO_DIR/installer/common"
+CONTENT_DIR="$REPO_DIR/installer/content"
 
 # The modules that ship to a device. Driven by the repo root, NOT by whatever
 # is already in common/ — a mirror-driven loop can only refresh files it
@@ -80,13 +82,34 @@ for mirror in "$COMMON_DIR"/*.py; do
     $listed || echo "ORPHAN $name — in common/ but not in SHIP_FILES"
 done
 
+# installer/content/ is the same kind of hand-maintained mirror as common/,
+# for menus and sounds instead of modules, and it rots the same way: it was
+# still shipping the retired AI-generated board art after the menu was
+# rebuilt. --delete matters here — a renamed icon must not linger on the
+# card, or install_code.py copies both the old and the new one.
+for tree in menus button_sounds; do
+    src="$REPO_DIR/$tree/"
+    dst="$CONTENT_DIR/$tree/"
+    [ -d "$src" ] || continue
+    mkdir -p "$dst"
+    if $CHECK_ONLY; then
+        if ! diff -rq "$src" "$dst" >/dev/null 2>&1; then
+            stale=$((stale + 1))
+            echo "STALE   content/$tree"
+        fi
+    else
+        rsync -a --delete "$src" "$dst"
+        echo "sync  content/$tree"
+    fi
+done
+
 echo
 if $CHECK_ONLY; then
     if [ "$stale" -gt 0 ]; then
-        echo "installer/common is STALE ($stale file(s)) — run ./installer/sync_common.sh"
+        echo "installer/ mirror is STALE ($stale item(s)) — run ./installer/sync_common.sh"
         exit 1
     fi
-    echo "installer/common is up to date."
+    echo "installer/ mirror is up to date (common + content)."
 else
-    echo "Synced $stale file(s); installer/common now matches the repo root."
+    echo "installer/ mirror now matches the repo (common + content)."
 fi
