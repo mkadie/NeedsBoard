@@ -428,6 +428,144 @@ VARIANTS = {
         "language_switcher_enabled": False,
     },
 
+    "FRUITJAM_CLONE_18_SILENT": {
+        "name": "FRUITJAM_CLONE_18_SILENT",
+        # Fruit Jam *clone* (bench unit UID 62AB3604F4D0B8E6, CircuitPython
+        # 10.2.1). Same ZJY180SN00 1.8" panel and encoder as FRUITJAM_V2, but
+        # the board differs in three ways that all force config changes:
+        #
+        #   1. The auxiliary 3V3 rail (screen + other optional devices) is
+        #      gated by an ACTIVE-LOW-enable load switch on GPIO10 (=board.D10)
+        #      with an external pull-up (new board rev): drive D10 LOW to enable
+        #      the rail, RELEASE D10 to high-Z to disable it (the pull-up floats
+        #      the enable off). Same polarity as FRUITJAM_V2's active-low
+        #      FULL_POWER (on A4); only the pin differs. (An earlier rev of this
+        #      board used an active-HIGH TPS22917 here; the design inverted it.)
+        #   2. That steals D10, which FRUITJAM_V2 uses as the encoder button.
+        #      The clone's encoder button is instead wired to BUTTON1 (= GPIO0,
+        #      verified on the bench 2026-09-18). Peripherals() claims BUTTON1
+        #      as one of its three buttons, but machine._init_fruitjam_
+        #      peripherals() deinits those right after init, so InputManager
+        #      can claim it. Rotation stays on D8/D9.
+        #   3. The I2C pull-ups are NOT fitted on this unit. SDA/SCL read
+        #      high only from the MCU's internal pulls, busio.I2C() raises
+        #      "No pull up found", and the resulting Peripherals() failure is
+        #      a hard CORE crash -> safe mode (GC_ALLOC_OUTSIDE_VM), not a
+        #      Python exception, so machine.py's try/except cannot catch it.
+        #      The only safe course is to never open the bus: audio off, I2C
+        #      pins None. Display, menus and the encoder all still work.
+        #
+        #      This is FRUITJAM_CLONE_18 minus audio. Fit the pull-ups and
+        #      switch config.txt to FRUITJAM_CLONE_18 to get sound; nothing
+        #      else about the board differs.
+        #      Bench unit UID 21F5C34F3D14325B, confirmed 2026-09-18.
+        #      See documents/tps22917_load_switch_processed.md.
+
+        # Display — identical panel + wiring to FRUITJAM_V2.
+        "display_type": "ST7735R",
+        "screen_width": 160,
+        "screen_height": 128,
+        "display_rotation": 90,
+        "display_inverted": False,
+        "background_image": None,
+        "start_menu": "base_fruitjam.menu",
+        "lcd_cs": "A3",
+        "lcd_dc": "A2",
+        "lcd_sclk": "SCK",
+        "lcd_mosi": "MOSI",
+        "lcd_miso": "MISO",
+        "lcd_backlight": None,
+        "lcd_reset": "A1",
+        "st7735_colstart": 2,
+        "st7735_rowstart": 1,
+        "st7735_bgr": True,
+        "spi_baudrate": 24_000_000,
+
+        # Rail enable — ACTIVE LOW (new board rev): drive D10 LOW to power the
+        # screen + optional devices; RELEASE the pin (high-Z) to cut the rail,
+        # where an external pull-up holds the load switch off.
+        "full_power_pin": "D10",
+        "full_power_active_low": True,
+        "full_power_off_release": True,   # disable by releasing, not driving high
+        "full_power_settle_ms": 100,
+        "periph_reset_pin": None,
+
+        # Audio — OFF. See the header note: without pull-ups the DAC is
+        # unreachable and Peripherals() takes the board into safe mode.
+        "sound_system": "NONE",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "playback_speed": 100,
+        "dac_volume": -10,       # dB
+        "speaker_volume": 0,     # dB
+        "speaker_gain": 24,      # dB
+        # Headset auto-detect is off here, so pin the route to the jack —
+        # without this AudioPlayer falls back to "speaker".
+        "audio_output_default": "headphone",
+        "headphone_volume": 0,           # dB
+        "headphone_left_gain": 9,        # dB
+        "headphone_right_gain": 9,       # dB
+        # I2S pins not used directly — Peripherals handles them
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # I2C — nothing may open this bus on an unfitted board.
+        "i2c_scl": None,
+        "i2c_sda": None,
+
+        "sd_card": False,
+        "sd_cs": None,
+        "sd_sclk": None,
+        "sd_mosi": None,
+        "sd_miso": None,
+        "sd_shares_display_spi": False,
+
+        "touch_screen": False,
+
+        # Encoder-only input; no USB HID keyboard, no seesaw expander.
+        "input_type": None,
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "direct_buttons_active_low": True,
+        "seesaw_buttons": False,
+
+        # Rotary encoder — A/B as on FRUITJAM_V2; button on BUTTON1/GPIO0
+        # rather than V2's D10, which this board uses for the rail (note 2).
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "D8",
+        "encoder_pin_b": "D9",
+        "encoder_button_pin": "BUTTON1",   # = GPIO0 (see note 2)
+        "encoder_button_index": 0,
+
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+        "neopixel_pin": None,
+        "neopixel_count": 0,
+
+        # 3x2 = 6 cells, matching base_fruitjam.menu and the 160x128 assets.
+        "button_cols": 3,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Emergency push/hold — live now that audio works and the encoder
+        # button resolves to BUTTON1. Both route through encoder_button_pin.
+        "emergency_push_enabled": False,
+        "emergency_hold_enabled": False,
+
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+
+        "language_switcher_enabled": False,
+    },
+
+
     "RP2350_OLED_BADGE_V3": {
         "name": "RP2350_OLED_BADGE_V3",
 
