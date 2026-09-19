@@ -65,6 +65,10 @@ class SleepManager:
         self._peripherals = None
         self._full_power = None
         self._full_power_active_low = config.get("full_power_active_low", True)
+        # When True, disable the rail by RELEASING the pin to high-Z (an
+        # external pull-up holds the load switch off) instead of driving it to
+        # the inactive level. Used by boards whose enable net must float off.
+        self._full_power_off_release = config.get("full_power_off_release", False)
         self._full_power_settle_ms = config.get("full_power_settle_ms", 500)
         self._periph_reset_pin_name = config.get("periph_reset_pin")
         self._periph_reset = None  # DigitalInOut, claimed during idle
@@ -218,8 +222,10 @@ class SleepManager:
                 print("Sleep: PERIPH_RESET held LOW")
 
             if self._full_power:
-                active_low = self._full_power_active_low
-                self._full_power.value = active_low
+                if self._full_power_off_release:
+                    self._full_power.switch_to_input()
+                else:
+                    self._full_power.value = self._full_power_active_low
                 print("Sleep: FULL_POWER OFF")
         else:
             # Light path: OLED badge — just turn display off
