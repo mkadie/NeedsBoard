@@ -60,6 +60,10 @@ class DisplayManager:
         self._splash = displayio.Group()
         self._display.root_group = self._splash
 
+        # Built on first sleep — a full-screen black fill used to blank the
+        # panel without touching the controller's sleep mode.
+        self._blank_group = None
+
         # Selection highlight overlay
         self._highlight = None
         self._highlight_index = -1
@@ -432,35 +436,79 @@ class DisplayManager:
         """Put display into low-power mode.
 
         SSD1306: DISPLAYOFF (0xAE) — drops to ~10uA
-        ILI9341/ST7735R: SLPIN (0x10) — drops to ~0.1mA
+        ILI9341/ST7735R: DISPOFF (0x28) then SLPIN (0x10) — ~0.1mA
+
+        The panel is blanked before sleeping it: SLPIN alone stops the
+        booster while the driver still thinks it is displaying, which on
+        the ST7735R leaves a fading ghost of the last frame.
         """
-        if not hasattr(self, '_display_bus'):
-            return
-        try:
-            if self._text_mode:
-                self._display_bus.send(0xAE, b"")  # SSD1306 DISPLAYOFF
-            else:
-                self._display_bus.send(0x10, b"")  # ILI9341 SLPIN
-        except:
-            pass
+        if self._text_mode:
+            if hasattr(self, '_display_bus'):
+                try:
+                    self._display_bus.send(0xAE, b"")  # SSD1306 DISPLAYOFF
+                except:
+                    pass
+        else:
+            # Colour panels blank through displayio, not SLPIN. Panel sleep
+            # saves about 0.1 mA and costs a screen that does not come back:
+            # SLPOUT is not guaranteed to preserve the controller's RAM, and
+            # displayio then has no dirty region, so it sends nothing and the
+            # panel stays black. Swapping the root group is pure displayio --
+            # it always repaints -- and on boards with a real backlight pin
+            # the saving comes from the backlight anyway.
+            self._show_blank()
+        self.set_backlight(False)
 
     def wake_display(self):
-        """Wake display from low-power mode.
+        """Wake display from low-power mode and put an image back on it.
 
         SSD1306: DISPLAYON (0xAF)
-        ILI9341/ST7735R: SLPOUT (0x11) + 120ms settle
+        ILI9341/ST7735R: SLPOUT (0x11) + 120ms settle + DISPON (0x29)
+
+        Sleep-out is not enough on its own. The panel needs DISPON to
+        re-enable output, its RAM is not guaranteed to survive the sleep,
+        and displayio only pushes pixels it believes have changed — so
+        without a forced redraw the screen comes back blank. The backlight
+        is switched on last, so the panel is never lit while empty.
         """
-        if not hasattr(self, '_display_bus'):
+        if self._text_mode:
+            if hasattr(self, '_display_bus'):
+                try:
+                    self._display_bus.send(0xAF, b"")  # SSD1306 DISPLAYON
+                except:
+                    pass
+        else:
+            self.refresh()
+        self.set_backlight(True)
+
+    def _show_blank(self):
+        """Put a full-screen black bitmap up, so the panel reads as off."""
+        if self._display is None:
+            return
+        if getattr(self, "_blank_group", None) is None:
+            bmp = displayio.Bitmap(self._width, self._height, 1)
+            pal = displayio.Palette(1)
+            pal[0] = 0x000000
+            self._blank_group = displayio.Group()
+            self._blank_group.append(
+                displayio.TileGrid(bmp, pixel_shader=pal))
+        try:
+            self._display.root_group = self._blank_group
+        except Exception as e:
+            print("Display: blank failed:", e)
+
+    def refresh(self):
+        """Put the real screen contents back and force a repaint.
+
+        Re-attaching the root group is what marks the whole frame dirty;
+        displayio otherwise believes nothing changed and sends nothing.
+        """
+        if self._display is None or self._splash is None:
             return
         try:
-            if self._text_mode:
-                self._display_bus.send(0xAF, b"")  # SSD1306 DISPLAYON
-            else:
-                self._display_bus.send(0x11, b"")  # ILI9341 SLPOUT
-                import time
-                time.sleep(0.12)
-        except:
-            pass
+            self._display.root_group = self._splash
+        except Exception as e:
+            print("Display: refresh failed:", e)
 
     @property
     def display(self):

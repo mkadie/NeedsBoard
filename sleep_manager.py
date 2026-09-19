@@ -223,9 +223,15 @@ class SleepManager:
         # here so a user enabling sleep in config.txt cannot arm it by hand.
         can_cut_power = (self._peripherals is not None
                          or self._full_power is not None)
-        if can_cut_power and self._config.get("full_power_feeds_inputs", False):
-            print("Sleep: FULL_POWER feeds the wake inputs — staying powered")
-            can_cut_power = False
+        if can_cut_power:
+            # Two different boards, two different reasons the rail must stay
+            # up. Each variant states which applies to it.
+            if self._config.get("full_power_feeds_inputs", False):
+                print("Sleep: FULL_POWER feeds the wake inputs — staying powered")
+                can_cut_power = False
+            elif self._config.get("full_power_feeds_display", False):
+                print("Sleep: FULL_POWER feeds the panel — staying powered")
+                can_cut_power = False
         heavy_sleep = can_cut_power
 
         if heavy_sleep:

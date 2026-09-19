@@ -589,6 +589,145 @@ VARIANTS = {
     },
 
 
+    "FRUITJAM_CLONE_18_A4": {
+        "name": "FRUITJAM_CLONE_18_A4",
+        # Fruit Jam *clone*, second board revision (bench unit UID
+        # 21F5C34F3D14325B). Same 1.8" ST7735R panel, same encoder, same
+        # TLV320 audio as FRUITJAM_CLONE_18 — but the panel rail is gated on
+        # A4, the way a genuine Fruit Jam does it, NOT on D10.
+        #
+        # Bench-verified 2026-09-19 by driving each pin in turn and reading
+        # the label the panel showed: it lights with A4 low and stays dark
+        # with only D10 low. Running FRUITJAM_CLONE_18 on this board leaves
+        # A4 floating, and its external pull-up then holds the rail OFF, so
+        # the screen never lights — which looks exactly like a dead backlight.
+        #
+        # The encoder button is still BUTTON1 (= GPIO0), not FRUITJAM_V2's
+        # D10, so this is neither variant unmodified. D10 is unused here.
+        #
+        # Identify by UID, not by CIRCUITPY label: the labels move between
+        # sessions and these boards are otherwise indistinguishable.
+        # Display — identical panel + wiring to FRUITJAM_V2.
+        "display_type": "ST7735R",
+        "screen_width": 160,
+        "screen_height": 128,
+        "display_rotation": 90,
+        "display_inverted": False,
+        "background_image": None,
+        "start_menu": "base_fruitjam.menu",
+        "lcd_cs": "A3",
+        "lcd_dc": "A2",
+        "lcd_sclk": "SCK",
+        "lcd_mosi": "MOSI",
+        "lcd_miso": "MISO",
+        # D10 is a separate, active-high BACKLIGHT enable on this board --
+        # independent of the A4 panel rail, verified by holding A4 low and
+        # toggling D10 alone (the backlight blinked while the image stayed).
+        # Note the trap: FRUITJAM_CLONE_18 uses D10 as its *panel rail*.
+        # Same pin, opposite job, two board revisions.
+        "lcd_backlight": "D10",
+        "lcd_reset": "A1",
+        "st7735_colstart": 2,
+        "st7735_rowstart": 1,
+        "st7735_bgr": True,
+        "spi_baudrate": 24_000_000,
+
+        # Rail enable — ACTIVE LOW (new board rev): drive D10 LOW to power the
+        # screen + optional devices; RELEASE the pin (high-Z) to cut the rail,
+        # where an external pull-up holds the load switch off.
+        "full_power_pin": "A4",
+        "full_power_active_low": True,
+        "full_power_off_release": True,   # disable by releasing, not driving high
+        "full_power_settle_ms": 100,
+        "periph_reset_pin": None,
+
+        # Audio — OFF. See the header note: without pull-ups the DAC is
+        # unreachable and Peripherals() takes the board into safe mode.
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "playback_speed": 100,
+        "dac_volume": -10,       # dB
+        "speaker_volume": 0,     # dB
+        "speaker_gain": 24,      # dB
+        # Headset auto-detect is off here, so pin the route to the jack —
+        # without this AudioPlayer falls back to "speaker".
+        # Same jack auto-routing as FRUITJAM_CLONE_18: poll fast,
+        # settle slow — the detector chatters while a plug moves.
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.1,
+        "headset_debounce": 1.0,
+        "audio_output_default": "headphone",
+        "headphone_volume": 0,           # dB
+        "headphone_left_gain": 9,        # dB
+        "headphone_right_gain": 9,       # dB
+        # I2S pins not used directly — Peripherals handles them
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # I2C — nothing may open this bus on an unfitted board.
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+
+        "sd_card": False,
+        "sd_cs": None,
+        "sd_sclk": None,
+        "sd_mosi": None,
+        "sd_miso": None,
+        "sd_shares_display_spi": False,
+
+        "touch_screen": False,
+
+        # Encoder-only input; no USB HID keyboard, no seesaw expander.
+        "input_type": None,
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "direct_buttons_active_low": True,
+        "seesaw_buttons": False,
+
+        # Rotary encoder — A/B as on FRUITJAM_V2; button on BUTTON1/GPIO0
+        # rather than V2's D10, which this board uses for the rail (note 2).
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "D8",
+        "encoder_pin_b": "D9",
+        "encoder_button_pin": "BUTTON1",   # = GPIO0 (see note 2)
+        "encoder_button_index": 0,
+
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+        "neopixel_pin": None,
+        "neopixel_count": 0,
+
+        # 3x2 = 6 cells, matching base_fruitjam.menu and the 160x128 assets.
+        "button_cols": 3,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Emergency push/hold — live now that audio works and the encoder
+        # button resolves to BUTTON1. Both route through encoder_button_pin.
+        "emergency_push_enabled": False,
+        "emergency_hold_enabled": False,
+
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": ["BUTTON1"],
+        # The A4 rail powers the panel and nothing re-initialises the display
+        # after a power cut, so sleep leaves it up. That costs nothing now:
+        # the backlight is on its own pin, so sleep darkens the screen by
+        # switching D10 rather than by pulling the panel's power.
+        "full_power_feeds_display": True,
+
+        "language_switcher_enabled": False,
+    },
+
+
+
     "RP2350_OLED_BADGE_V3": {
         "name": "RP2350_OLED_BADGE_V3",
 
