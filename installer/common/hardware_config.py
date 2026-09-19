@@ -92,7 +92,7 @@ VARIANTS = {
         "sleep_enabled": True,
         "sleep_timeout": 120,
         "sleep_mode": "light",
-        "sleep_wake_pins": ["GPIO0", "GPIO17", "GPIO14"],
+        "sleep_wake_pins": ["GPIO0", "GPIO17"],
         "wake_ignore_seconds": 1.0,  # Grace period — instant wake needs this
     },
 
@@ -177,7 +177,17 @@ VARIANTS = {
     "FRUITJAM_V2": {
         "name": "FRUITJAM_V2",
 
-        # Display — ST7735S 1.77" 160x128 (landscape via rotation=90)
+        # Display — ZJY180SN00: a cheap bare 1.8" TFT panel, ST7735(S/R)
+        # controller, 128x160 native portrait -> 160x128 landscape via
+        # rotation=90. Sold as "1.8 inch" (the 180 in the part number is the
+        # size, not the pixel count); often listed loosely as a 2" panel.
+        # Datasheet filename seen in the wild: ZJY180SN009.pdf.
+        # Wired into the same daughterboard socket as the 2.8" ILI9341 used by
+        # FRUITJAM_LCD_28 — only the controller, resolution and grid differ,
+        # so swapping panels means switching between those two variants.
+        # Needs the 160x128 asset set (image_160x128/, 3x2 grid), NOT the
+        # 320x240 one; the colstart/rowstart offsets below are what centres
+        # this particular panel's visible window.
         "display_type": "ST7735R",
         "screen_width": 160,
         "screen_height": 128,
@@ -204,6 +214,13 @@ VARIANTS = {
         "dac_volume": -10,       # dB
         "speaker_volume": 0,     # dB
         "speaker_gain": 24,      # dB
+        # Route audio out of the headphone jack rather than the speaker.
+        # Without this the AudioPlayer falls back to "speaker" (headset
+        # auto-detect is off on this variant, so the route stays fixed).
+        "audio_output_default": "headphone",
+        "headphone_volume": 0,           # dB
+        "headphone_left_gain": 9,        # dB
+        "headphone_right_gain": 9,       # dB
         # I2S pins not used directly — Peripherals handles them
         "i2s_bclk": None,
         "i2s_ws": None,
@@ -275,6 +292,140 @@ VARIANTS = {
         # Hardware-specific sleep settings (not in config.txt)
         "sleep_mode": "software_idle",
         "sleep_wake_pins": [],
+    },
+
+    "FRUITJAM_CLONE_18": {
+        "name": "FRUITJAM_CLONE_18",
+        # Fruit Jam *clone* (bench unit UID 62AB3604F4D0B8E6, CircuitPython
+        # 10.2.1). Same ZJY180SN00 1.8" panel and encoder as FRUITJAM_V2, but
+        # the board differs in three ways that all force config changes:
+        #
+        #   1. The auxiliary 3V3 rail (screen + other optional devices) is
+        #      gated by an ACTIVE-LOW-enable load switch on GPIO10 (=board.D10)
+        #      with an external pull-up (new board rev): drive D10 LOW to enable
+        #      the rail, RELEASE D10 to high-Z to disable it (the pull-up floats
+        #      the enable off). Same polarity as FRUITJAM_V2's active-low
+        #      FULL_POWER (on A4); only the pin differs. (An earlier rev of this
+        #      board used an active-HIGH TPS22917 here; the design inverted it.)
+        #   2. That steals D10, which FRUITJAM_V2 uses as the encoder button.
+        #      The clone's encoder button is instead wired to BUTTON1 (= GPIO0,
+        #      verified on the bench 2026-09-18). Peripherals() claims BUTTON1
+        #      as one of its three buttons, but machine._init_fruitjam_
+        #      peripherals() deinits those right after init, so InputManager
+        #      can claim it. Rotation stays on D8/D9.
+        #   3. The I2C pull-ups were originally unpopulated, which made the
+        #      TLV320 DAC unreachable and forced sound_system = "NONE". They
+        #      are now FITTED, so audio is enabled below (bench-verified
+        #      2026-09-18 on both the speakers and the headphone jack).
+        #      See documents/tps22917_load_switch_processed.md.
+
+        # Display — identical panel + wiring to FRUITJAM_V2.
+        "display_type": "ST7735R",
+        "screen_width": 160,
+        "screen_height": 128,
+        "display_rotation": 90,
+        "display_inverted": False,
+        "background_image": None,
+        "start_menu": "base_fruitjam.menu",
+        "lcd_cs": "A3",
+        "lcd_dc": "A2",
+        "lcd_sclk": "SCK",
+        "lcd_mosi": "MOSI",
+        "lcd_miso": "MISO",
+        "lcd_backlight": None,
+        "lcd_reset": "A1",
+        "st7735_colstart": 2,
+        "st7735_rowstart": 1,
+        "st7735_bgr": True,
+        "spi_baudrate": 24_000_000,
+
+        # Rail enable — ACTIVE LOW (new board rev): drive D10 LOW to power the
+        # screen + optional devices; RELEASE the pin (high-Z) to cut the rail,
+        # where an external pull-up holds the load switch off.
+        "full_power_pin": "D10",
+        "full_power_active_low": True,
+        "full_power_off_release": True,   # disable by releasing, not driving high
+        "full_power_settle_ms": 100,
+        "periph_reset_pin": None,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals, now that the I2C
+        # pull-ups are fitted (see note 3 above). Levels match FRUITJAM_V2;
+        # periph_reset_pin stays None here (the clone has no PERIPH_RESET net
+        # and Peripherals() brings the DAC up without it).
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "playback_speed": 100,
+        "dac_volume": -10,       # dB
+        "speaker_volume": 0,     # dB
+        "speaker_gain": 24,      # dB
+        # Headset auto-detect is off here, so pin the route to the jack —
+        # without this AudioPlayer falls back to "speaker".
+        "audio_output_default": "headphone",
+        "headphone_volume": 0,           # dB
+        "headphone_left_gain": 9,        # dB
+        "headphone_right_gain": 9,       # dB
+        # I2S pins not used directly — Peripherals handles them
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # I2C — pull-ups now fitted; the DAC answers at 0x18. Peripherals()
+        # opens the bus itself via board.I2C(), so these are declarative.
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+
+        "sd_card": False,
+        "sd_cs": None,
+        "sd_sclk": None,
+        "sd_mosi": None,
+        "sd_miso": None,
+        "sd_shares_display_spi": False,
+
+        "touch_screen": False,
+
+        # Encoder-only input; no USB HID keyboard, no seesaw expander.
+        "input_type": None,
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "direct_buttons_active_low": True,
+        "seesaw_buttons": False,
+
+        # Rotary encoder — A/B as on FRUITJAM_V2; button on BUTTON1/GPIO0
+        # rather than V2's D10, which this board uses for the rail (note 2).
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "D8",
+        "encoder_pin_b": "D9",
+        "encoder_button_pin": "BUTTON1",   # = GPIO0 (see note 2)
+        "encoder_button_index": 0,
+
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+        "neopixel_pin": None,
+        "neopixel_count": 0,
+
+        # 3x2 = 6 cells, matching base_fruitjam.menu and the 160x128 assets.
+        "button_cols": 3,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Emergency push/hold — live now that audio works and the encoder
+        # button resolves to BUTTON1. Both route through encoder_button_pin.
+        "emergency_push_enabled": True,
+        "emergency_push_sound": "/button_sounds/emergency.mp3",
+        "emergency_hold_enabled": True,
+        "emergency_hold_seconds": 3,
+
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+
+        "language_switcher_enabled": False,
     },
 
     "RP2350_OLED_BADGE_V3": {
@@ -458,7 +609,426 @@ VARIANTS = {
         "sleep_mode": "light",
         "sleep_wake_pins": [],
     },
+
+    "FRUITJAM_DVI_KBD": {
+        "name": "FRUITJAM_DVI_KBD",
+
+        # Display — onboard DVI/HDMI output. The RP2350B firmware only
+        # accepts a fixed set of framebuffer sizes:
+        #   {(320,240), (360,200), (640,480), (720,400)}.
+        # 320x240 is auto-2x-scaled to 640x480 HDMI at 16 bpp.
+        # Bring-up:
+        #     import displayio, supervisor
+        #     from adafruit_fruitjam.peripherals import request_display_config
+        #     displayio.release_displays()
+        #     request_display_config(320, 240)
+        #     display = supervisor.runtime.display   # NOT board.DISPLAY
+        "display_type": "FRUITJAM_DVI",
+        "screen_width": 320,
+        "screen_height": 240,
+        "framebuffer_pixel_scale": 2,    # 320x240 -> 640x480 HDMI signal
+        "framebuffer_color_depth": 16,
+        "display_rotation": 0,
+        "display_inverted": False,
+        # Initial background while menu loads — overridden by menu.background.
+        "background_image": "/menus/images/needs_small.bmp",
+        "start_menu": "base_moana.menu",   # canonical Moana 8-button board
+        # SPI-display pins are unused (DVI uses dedicated CKP/CKN/D0..2 P/N pairs)
+        "lcd_cs": None,
+        "lcd_dc": None,
+        "lcd_sclk": None,
+        "lcd_mosi": None,
+        "lcd_miso": None,
+        "lcd_backlight": None,
+        "lcd_reset": None,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals (matches FRUITJAM_V2)
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "dac_volume": -10,
+        "speaker_volume": 0,
+        "speaker_gain": 24,         # max analog speaker amp gain
+        "headphone_volume": 0,      # max analog headphone volume
+        "headphone_left_gain": 9,   # max analog HP amp gain (chip cap)
+        "headphone_right_gain": 9,  # max analog HP amp gain (chip cap)
+        # 3.5 mm jack auto-detect: speaker by default, swap to headphone
+        # when something is plugged in. AudioPlayer polls the codec's
+        # headset_status from the main loop.
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.5,
+        "headset_debounce": 1.0,
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # No daughterboard rail to gate on bare Fruit Jam
+        "full_power_pin": None,
+        "full_power_active_low": False,
+        "full_power_settle_ms": 0,
+
+        # Peripherals reset — must be HIGH for DAC operation
+        "periph_reset_pin": "PERIPH_RESET",
+
+        # SD Card — onboard SDIO slot present but disabled here until tested.
+        "sd_card": False,
+        "sd_cs": "SD_CS",
+        "sd_sclk": "SD_SCK",
+        "sd_mosi": "SD_MOSI",
+        "sd_miso": "SD_MISO",
+        "sd_shares_display_spi": False,
+
+        # I2C (DAC + STEMMA peripherals)
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        # No touch screen on a DVI monitor
+        "touch_screen": False,
+
+        # Input — USB HID keyboard via the Fruit Jam USB host port.
+        # Requires /boot.py with usb_host.Port() — see docs.
+        "input_type": "USB_HID_KEYBOARD",
+        "usb_host_dp": "USB_HOST_DATA_PLUS",
+        "usb_host_dm": "USB_HOST_DATA_MINUS",
+        "usb_host_5v_power": "USB_HOST_5V_POWER",
+
+        # Onboard buttons — 3 tactile buttons on the Fruit Jam PCB.
+        # Active-LOW with internal pull-up. max_buttons here counts decoder-bus
+        # buttons (none here); the 3 onboard ones are direct GPIO.
+        "max_buttons": 0,
+        "direct_button_pins": ["BUTTON1", "BUTTON2", "BUTTON3"],
+        "direct_buttons_active_low": True,
+
+        # Rotary encoder — not used in this variant (keyboard handles navigation)
+        "rotary_encoder": False,
+        "encoder_navigation": False,
+        "encoder_pin_a": None,
+        "encoder_pin_b": None,
+        "encoder_button_pin": None,
+        "encoder_button_index": 0,
+
+        "wake_button_pin": "BUTTON1",
+        "wake_button_index": 0,
+
+        # Onboard 5x NeoPixel strip
+        "neopixel_pin": "NEOPIXEL",
+        "neopixel_count": 5,
+
+        # 4x2 = 8 cells, mapped 1:1 to keypad keys 1..8
+        "button_cols": 4,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Sleep — software idle (RP2350B has no alarm module).
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+    },
+
+    "FRUITJAM_DVI_ENC": {
+        "name": "FRUITJAM_DVI_ENC",
+
+        # Display — onboard DVI/HDMI output, 320x240 fb -> 640x480 HDMI.
+        # See FRUITJAM_DVI_KBD for the bring-up sequence rationale.
+        "display_type": "FRUITJAM_DVI",
+        "screen_width": 320,
+        "screen_height": 240,
+        "framebuffer_pixel_scale": 2,
+        "framebuffer_color_depth": 16,
+        "display_rotation": 0,
+        "display_inverted": False,
+        "background_image": "/menus/images/needs_small.bmp",
+        "start_menu": "base_moana.menu",
+        "lcd_cs": None,
+        "lcd_dc": None,
+        "lcd_sclk": None,
+        "lcd_mosi": None,
+        "lcd_miso": None,
+        "lcd_backlight": None,
+        "lcd_reset": None,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals.
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "dac_volume": -10,
+        "speaker_volume": 0,
+        "speaker_gain": 24,
+        "headphone_volume": 0,
+        "headphone_left_gain": 9,
+        "headphone_right_gain": 9,
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.5,
+        "headset_debounce": 1.0,
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        "full_power_pin": None,
+        "full_power_active_low": False,
+        "full_power_settle_ms": 0,
+        "periph_reset_pin": "PERIPH_RESET",
+
+        # SD card — enabled, content overrides flash.
+        "sd_card": True,
+        "sd_cs": "SD_CS",
+        "sd_sclk": "SD_SCK",
+        "sd_mosi": "SD_MOSI",
+        "sd_miso": "SD_MISO",
+        "sd_shares_display_spi": False,
+
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        "touch_screen": False,
+
+        # USB HID keyboard kept for digit-key cell selection (1..8).
+        "input_type": "USB_HID_KEYBOARD",
+        "usb_host_dp": "USB_HOST_DATA_PLUS",
+        "usb_host_dm": "USB_HOST_DATA_MINUS",
+        "usb_host_5v_power": "USB_HOST_5V_POWER",
+
+        # Direct buttons OFF — BUTTON1/BUTTON2/BUTTON3 GPIOs are repurposed
+        # as the rotary encoder. Same physical hardware, different reading
+        # mode: BUTTON1 = encoder A, BUTTON2 = encoder B, BUTTON3 = click.
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "direct_buttons_active_low": True,
+
+        # Rotary encoder — drives the language switcher overlay. Encoder
+        # navigation is FALSE so rotation doesn't move a menu highlight
+        # (we want it to open the language picker instead).
+        "rotary_encoder": True,
+        "encoder_navigation": False,
+        "encoder_pin_a": "BUTTON1",
+        "encoder_pin_b": "BUTTON2",
+        "encoder_button_pin": "BUTTON3",
+        "encoder_button_index": 0,
+
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+
+        # Peripherals already owns the onboard 5-pixel strip — leave None
+        # so Machine doesn't try to re-claim board.NEOPIXEL.
+        "neopixel_pin": None,
+        "neopixel_count": 0,
+
+        # 4x2 = 8 cells, mapped 1:1 to keypad keys 1..8.
+        "button_cols": 4,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Sleep — software idle (RP2350B has no alarm module).
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+
+        # Multi-lingual: matches the CYD_PLUS asset layout the subprogram
+        # already expects (/lang_images/lang_<code>.bmp, /menus/lang_<code>.menu,
+        # /button_sounds/languages/<code>/*.wav).
+        "language_switcher_enabled": True,
+    },
+
+    "FRUITJAM_LCD_28": {
+        "name": "FRUITJAM_LCD_28",
+
+        # Display — 2.8" 320x240 ILI9341 SPI on the Fruit Jam daughterboard.
+        # Same daughterboard socket pinout as FRUITJAM_V2 (which used the
+        # 1.77" ST7735R) — only the controller and resolution differ.
+        "display_type": "ILI9341",
+        "screen_width": 320,
+        "screen_height": 240,
+        "display_rotation": 0,            # flip if image is upside-down
+        "display_inverted": False,        # set True if IPS panel (colors inverted)
+        "background_image": None,         # menu provides background
+        "start_menu": "base_moana.menu",
+        "lcd_cs": "A3",
+        "lcd_dc": "A2",
+        "lcd_sclk": "SCK",
+        "lcd_mosi": "MOSI",
+        "lcd_miso": "MISO",
+        "lcd_backlight": None,            # backlight on 3V3_SWITCHED rail
+        "lcd_reset": "A1",
+        "spi_baudrate": 24_000_000,
+
+        # Audio — TLV320DAC3100 via Fruit Jam Peripherals.
+        "sound_system": "FRUITJAM_DAC",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "dac_volume": -10,
+        "speaker_volume": 0,
+        "speaker_gain": 24,
+        "headphone_volume": 0,
+        "headphone_left_gain": 9,
+        "headphone_right_gain": 9,
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.5,
+        "headset_debounce": 1.0,
+        "i2s_bclk": None,
+        "i2s_ws": None,
+        "i2s_dout": None,
+        "i2s_mclk": None,
+        "amp_en_pin": None,
+        "amp_en_active_low": False,
+
+        # FULL_POWER — gates 3V3_SWITCHED rail (LCD VCC, IOVCC, backlight).
+        # Active low: LOW = power on, HIGH = power off. Same as FRUITJAM_V2.
+        "full_power_pin": None,  # disabled: FULL_POWER hardwired via pull-down (was "A4")
+        "full_power_active_low": True,
+        "full_power_settle_ms": 100,
+        # Hold A4 (FULL_POWER / seesaw BUTTON1 net) as an input with pull-up.
+        "input_pullup_pins": ["A4"],
+        # MSPM0 Seesaw button expander on the I2C bus: buttons 0..7 drive menu
+        # selections 0..7 when present (auto-skipped if not powered/found).
+        "seesaw_buttons": True,
+
+        # Peripherals reset — must be HIGH for DAC operation.
+        "periph_reset_pin": "PERIPH_RESET",
+
+        # SD card — daughterboard doesn't expose one.
+        "sd_card": False,
+        "sd_cs": None,
+        "sd_sclk": None,
+        "sd_mosi": None,
+        "sd_miso": None,
+        "sd_shares_display_spi": False,
+
+        # I2C (DAC + headset detect).
+        "i2c_scl": "SCL",
+        "i2c_sda": "SDA",
+        "i2c_freq": 400_000,
+
+        # No touch screen on this build.
+        "touch_screen": False,
+
+        # USB HID keyboard via the Fruit Jam USB host port.
+        # Requires /boot.py with usb_host.Port().
+        "input_type": "USB_HID_KEYBOARD",
+        "usb_host_dp": "USB_HOST_DATA_PLUS",
+        "usb_host_dm": "USB_HOST_DATA_MINUS",
+        "usb_host_5v_power": "USB_HOST_5V_POWER",
+
+        # Onboard tactile buttons — daughterboard doesn't route them.
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "direct_buttons_active_low": True,
+
+        # Rotary encoder on the daughterboard at D8/D9/D10 (same as FRUITJAM_V2).
+        "rotary_encoder": True,
+        "encoder_navigation": True,
+        "encoder_pin_a": "D8",
+        "encoder_pin_b": "D9",
+        "encoder_button_pin": "D10",
+        "encoder_button_index": 0,
+
+        "wake_button_pin": None,
+        "wake_button_index": 0,
+
+        # NeoPixel — Peripherals owns the onboard strip; leave None so
+        # Machine doesn't try to re-claim board.NEOPIXEL.
+        "neopixel_pin": None,
+        "neopixel_count": 0,
+
+        # 4x2 = 8 cells, mapped 1:1 to keypad keys 1..8.
+        "button_cols": 4,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Sleep — software idle (RP2350B has no alarm module).
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+
+        "language_switcher_enabled": True,
+    },
+
+    "PI_BLINKA": {
+        "name": "PI_BLINKA",
+        # Linux/Blinka target: Raspberry Pi 4 / 400 / Zero 2 W under Raspberry
+        # Pi OS. Runs on CPython3 (not the CircuitPython VM). machine.py swaps in
+        # the pi_blinka/ audio + input backends for platform=blinka; the display
+        # uses the BLINKA_PYGAME branch in display_manager.py.
+        "platform": "blinka",
+
+        # Display — HDMI via PyGameDisplay. App draws at LOGICAL 320x240 and
+        # reuses the existing 320x240 menus/assets; platform_detect.py picks the
+        # physical HDMI mode (Pi 4/400/Zero 2 W -> 1280x720 x3 -> 960x720
+        # pillarbox). Set hdmi_width/height/framebuffer_pixel_scale to override.
+        "display_type": "BLINKA_PYGAME",
+        "screen_width": 320,
+        "screen_height": 240,
+        "auto_profile": True,
+        "blinka_fullscreen": True,
+        # Mirror the UI to a second HDMI monitor when one is connected at
+        # startup; falls back to single-display automatically when absent.
+        "mirror_display": True,
+        "display_rotation": 0,
+        "display_inverted": False,
+        "background_image": None,        # menu provides background (avoid direct load)
+        "start_menu": "base_moana.menu",
+
+        # fs_base — absolute repo root, injected at runtime by pi_blinka/run_app.py
+        # so the app's "/menus", "/button_sounds" paths resolve under Linux.
+        "fs_base": None,
+
+        # Audio — Blinka backend (ALSA via pygame.mixer). Marker only; machine.py
+        # selects BlinkaAudioPlayer for platform=blinka.
+        "sound_system": "BLINKA_AUDIO",
+        "codec_sample_rate": 22050,
+        "volume": 80,
+        "playback_speed": 100,
+
+        # Input — two USB keyboards merged via Linux evdev. machine.py selects
+        # EvdevKeyboardInput for platform=blinka.
+        "input_type": "EVDEV_KEYBOARD",
+        "evdev_grab": False,             # True to stop the console seeing keys
+
+        # No SPI display / SD / I2C / codec / encoder / touch / NeoPixel here —
+        # keep these off so the CircuitPython-only init paths are skipped.
+        "lcd_cs": None, "lcd_dc": None, "lcd_sclk": None, "lcd_mosi": None,
+        "lcd_miso": None, "lcd_backlight": None, "lcd_reset": None,
+        "sd_card": False,
+        "i2c_scl": None, "i2c_sda": None,
+        "touch_screen": False,
+        "rotary_encoder": False,
+        "max_buttons": 0,
+        "direct_button_pins": [],
+        "seesaw_buttons": False,
+        "neopixel_pin": None,
+        "full_power_pin": None,
+        "wake_button_pin": None,
+
+        # Button grid — 4x2 = 8 cells (matches base_moana.menu).
+        "button_cols": 4,
+        "button_rows": 2,
+        "debounce_time": 0.05,
+
+        # Emergency + sleep off (no GPIO emergency button; Linux doesn't sleep
+        # the CircuitPython way).
+        "emergency_push_enabled": False,
+        "emergency_hold_enabled": False,
+        "sleep_enabled": False,
+        "sleep_timeout": 120,
+        "sleep_mode": "software_idle",
+        "sleep_wake_pins": [],
+
+        "language_switcher_enabled": False,
+    },
 }
 
-# Change this single line to switch machine variant
+# Change this single line to switch machine variant.
+# Fruit Jam daughterboard builds share a socket, so pick by fitted panel:
+#   FRUITJAM_V2      -> 1.8" ST7735 (ZJY180SN00), 160x128, 3x2 grid
+#   FRUITJAM_LCD_28  -> 2.8" ILI9341, 320x240, 4x2 grid (+ MSPM0 seesaw)
 DEFAULT_VARIANT = "FRUITJAM_V2"

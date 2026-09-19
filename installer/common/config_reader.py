@@ -1,3 +1,17 @@
+# ---------------------------------------------------------------------------
+# Modified file — originally from T-Rex Talker (https://github.com/mkadie).
+#
+# Upstream license: MIT.
+#     Copyright (c) T-Rex Talker contributors. All rights reserved under MIT.
+#     Permission is hereby granted, free of charge, to any person obtaining
+#     a copy of the upstream software and associated documentation files,
+#     to deal in the Software without restriction, subject to the conditions
+#     in the upstream LICENSE file. See ../NOTICE for the full MIT text.
+#
+# Modifications in this file were added as part of T-Rex Talker Interactive
+# and are licensed under the PolyForm Noncommercial License 1.0.0.
+# See ../LICENSE for terms and ../upstream_patches/README.md for what changed.
+# ---------------------------------------------------------------------------
 """Read user configuration from config.txt.
 
 Parses a simple key=value text file and overlays values onto
@@ -48,6 +62,11 @@ def apply_config(hw_config, user_config):
 
     Only applies keys that are recognized user-configurable settings.
     Returns the modified hw_config.
+
+    Note: `variant` is deliberately NOT in the allowed set below. It selects
+    which VARIANTS entry to start from, so Machine.__init__ consumes it before
+    this overlay runs; adding it here would just copy a dead key into the
+    hardware config.
     """
     allowed = {
         "sleep_enabled",
@@ -67,6 +86,11 @@ def apply_config(hw_config, user_config):
         "emergency_push_sound",
         "emergency_hold_enabled",
         "emergency_hold_seconds",
+        # Subprogram boot — "mode = stim_games/aac_trainer.py" tells the
+        # Machine to launch that subprogram after hardware init instead
+        # of (or in addition to) showing the start_menu. When the
+        # subprogram exits, control falls through to the menu loop.
+        "mode",
     }
 
     for key, val in user_config.items():

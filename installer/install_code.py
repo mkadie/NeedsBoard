@@ -21,13 +21,75 @@ Usage:
 import os
 import time
 
-# Board ID to variant mapping
+# Board ID to variant mapping. Some boards cannot be told apart this way --
+# see "Picking a variant by hand" in README.md.
 BOARD_MAP = {
     "yd_esp32_s3_n16r8": "CYD_PLUS",
     "adafruit_fruit_jam": "FRUITJAM_V2",
     "raspberry_pi_pico2": "RP2350_OLED_BADGE_V3",
     "adafruit_feather_rp2350": "FEATHER_RP2350_V1",
 }
+
+# Where a hand-picked variant may be declared, most specific first: on the
+# device being installed, then on the card. Device-side wins so that one card
+# can install a mix of boards without editing it between devices.
+VARIANT_FILES = ("/VARIANT.txt", "{sd}/VARIANT.txt")
+
+
+def read_variant_override(sd_base):
+    """Return the hand-declared variant name, or None if none is declared.
+
+    Accepts either a bare name or the `variant = NAME` form used by
+    config.txt, so whichever syntax the reader has already seen works.
+    Blank lines and #-comments are ignored.
+    """
+    for template in VARIANT_FILES:
+        path = template.format(sd=sd_base)
+        try:
+            f = open(path, "r")
+        except OSError:
+            continue
+        try:
+            for line in f:
+                line = line.split("#", 1)[0].strip()
+                if not line:
+                    continue
+                if "=" in line:
+                    key, _, val = line.partition("=")
+                    if key.strip() == "variant":
+                        line = val.strip()
+                if line:
+                    return line
+        finally:
+            f.close()
+    return None
+
+
+def known_variants(sd_base):
+    """Names in the VARIANTS table that is about to be installed, or None.
+
+    hardware_config.py is deliberately import-free, so importing it off the
+    card is an exact membership test -- and gives us the valid names for the
+    error message. None means the table could not be read at all, in which
+    case the caller skips validation rather than blocking a real install.
+    """
+    import sys
+
+    common = sd_base + "/common"
+    sys.path.insert(0, common)
+    try:
+        import hardware_config
+        return sorted(hardware_config.VARIANTS.keys())
+    except Exception:
+        return None
+    finally:
+        try:
+            sys.path.remove(common)
+        except ValueError:
+            pass
+        # Drop it so the copy landing on flash in Step 1 is what gets used.
+        sys.modules.pop("hardware_config", None)
+
 
 def read_board_id():
     """Read Board ID from boot_out.txt."""
@@ -115,15 +177,6 @@ def install():
         print("ERROR: Cannot read Board ID from boot_out.txt")
         return False
     print("Board ID:", board_id)
-
-    variant = BOARD_MAP.get(board_id)
-    if not variant:
-        print("ERROR: Unknown board '{}'\n".format(board_id))
-        print("Known boards:")
-        for bid, var in BOARD_MAP.items():
-            print("  {} -> {}".format(bid, var))
-        return False
-    print("Variant:", variant)
     print()
 
     # Mount SD card
@@ -168,6 +221,35 @@ def install():
         return False
 
     print("Installer source:", sd_base)
+    print()
+
+    # A declared variant wins over BOARD_MAP (see README.md).
+    known = known_variants(sd_base)
+    source = "VARIANT.txt"
+    variant = read_variant_override(sd_base)
+    if not variant:
+        source = "Board ID"
+        variant = BOARD_MAP.get(board_id)
+        if not variant:
+            print("ERROR: Unknown board '{}'\n".format(board_id))
+            print("Known boards:")
+            for bid, var in BOARD_MAP.items():
+                print("  {} -> {}".format(bid, var))
+            print("\nOr declare a variant in /VARIANT.txt on the device,")
+            print("or {}/VARIANT.txt on the card.".format(sd_base))
+            if known:
+                print("Available:", ", ".join(known))
+            return False
+    print("Variant: {} (from {})".format(variant, source))
+
+    if known is None:
+        print("  WARNING: could not read the VARIANTS table; skipping check")
+    elif variant not in known:
+        print("\nERROR: variant '{}' is not defined in".format(variant))
+        print("       {}/common/hardware_config.py".format(sd_base))
+        print("       (named in {} — check the spelling)".format(source))
+        print("Available:", ", ".join(known))
+        return False
     print()
 
     # Step 1: Copy common Python files

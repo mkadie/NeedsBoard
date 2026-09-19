@@ -49,6 +49,10 @@ class DisplayManager:
 
         if display_type == "SSD1306":
             self._init_ssd1306(config)
+        elif display_type == "FRUITJAM_DVI":
+            self._init_fruitjam_dvi(config)
+        elif display_type == "BLINKA_PYGAME":
+            self._init_blinka_pygame(config)
         else:
             self._init_spi_display(config, spi)
 
@@ -76,13 +80,55 @@ class DisplayManager:
         import adafruit_displayio_ssd1306
 
         i2c = busio.I2C(_pin(config["i2c_scl"]), _pin(config["i2c_sda"]))
-        display_bus = I2CDisplayBus(i2c, device_address=0x3C)
+        self._display_bus = I2CDisplayBus(i2c, device_address=0x3C)
         self._display = adafruit_displayio_ssd1306.SSD1306(
-            display_bus,
+            self._display_bus,
             width=self._width,
             height=self._height,
             rotation=config.get("display_rotation", 0),
         )
+
+    def _init_fruitjam_dvi(self, config):
+        """Bring up the Fruit Jam onboard DVI/HDMI output.
+
+        request_display_config() validates against the firmware's allowed
+        sizes ({320,240}, {360,200}, {640,480}, {720,400}) and populates
+        supervisor.runtime.display — board.DISPLAY does NOT exist on this
+        firmware. Verified on Fruit Jam CP 10.0.3.
+        """
+        import supervisor
+        from adafruit_fruitjam.peripherals import request_display_config
+        request_display_config(self._width, self._height)
+        self._spi = None
+        self._display_bus = None
+        self._backlight = None
+        self._display = supervisor.runtime.display
+        scale = config.get("framebuffer_pixel_scale", 1)
+        print("DVI ready: %dx%d fb -> %dx%d hdmi" % (
+            self._width, self._height,
+            self._width * scale, self._height * scale))
+
+    def _init_blinka_pygame(self, config):
+        """Bring up an HDMI displayio surface on a Raspberry Pi via Blinka.
+
+        Uses pi_blinka/display_backend.make_display(), which returns a
+        LogicalDisplay: the app keeps drawing at logical screen_width x
+        screen_height while the backend scales/pillarboxes to the physical HDMI
+        mode (auto-detected per board). Only runs under Blinka (CPython3); the
+        import is local so the CircuitPython targets never touch it.
+
+        The caller (machine.py) must call display_backend.service() once per main
+        loop to pump events + refresh — PyGame can't refresh from a thread.
+        """
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "pi_blinka"))
+        from display_backend import make_display
+        self._spi = None
+        self._display_bus = None
+        self._backlight = None
+        self._display = make_display(config)
 
     def _init_spi_display(self, config, spi):
         """Initialize SPI color display (ILI9341 or ST7735R)."""
@@ -381,6 +427,40 @@ class DisplayManager:
         """Turn the display backlight on or off."""
         if self._backlight:
             self._backlight.value = on
+
+    def sleep_display(self):
+        """Put display into low-power mode.
+
+        SSD1306: DISPLAYOFF (0xAE) — drops to ~10uA
+        ILI9341/ST7735R: SLPIN (0x10) — drops to ~0.1mA
+        """
+        if not hasattr(self, '_display_bus'):
+            return
+        try:
+            if self._text_mode:
+                self._display_bus.send(0xAE, b"")  # SSD1306 DISPLAYOFF
+            else:
+                self._display_bus.send(0x10, b"")  # ILI9341 SLPIN
+        except:
+            pass
+
+    def wake_display(self):
+        """Wake display from low-power mode.
+
+        SSD1306: DISPLAYON (0xAF)
+        ILI9341/ST7735R: SLPOUT (0x11) + 120ms settle
+        """
+        if not hasattr(self, '_display_bus'):
+            return
+        try:
+            if self._text_mode:
+                self._display_bus.send(0xAF, b"")  # SSD1306 DISPLAYON
+            else:
+                self._display_bus.send(0x11, b"")  # ILI9341 SLPOUT
+                import time
+                time.sleep(0.12)
+        except:
+            pass
 
     @property
     def display(self):
