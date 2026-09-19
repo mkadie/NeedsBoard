@@ -369,8 +369,13 @@ VARIANTS = {
         # speakers and the 3.5 mm jack. audio_output_default is only the
         # starting route, used until the first poll settles.
         "headset_detect_enabled": True,
-        "headset_poll_interval": 0.5,    # s between jack reads
-        "headset_debounce": 1.0,         # s a new state must hold
+        # Poll fast, settle slow. The jack detector chatters hard while a
+        # plug moves — measured 3/0/1/0/3/0/1/0 across four seconds on one
+        # insertion — so the debounce window has to span many samples, not
+        # two. At 0.1 s a 1 s settle needs ten consecutive agreeing reads;
+        # at the old 0.5 s it needed two, and rarely got them.
+        "headset_poll_interval": 0.1,    # s between jack reads
+        "headset_debounce": 1.0,         # s a reading must hold to count
         "audio_output_default": "headphone",
         "headphone_volume": 0,           # dB
         "headphone_left_gain": 9,        # dB
