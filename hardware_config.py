@@ -86,9 +86,14 @@ VARIANTS = {
         # sleep_timeout: seconds of inactivity before sleeping
         # sleep_mode: "light" (fast wake, program resumes) or
         #             "deep" (lowest power, full restart on wake)
-        # sleep_wake_pins: list of pin names that wake the device
+        # sleep_wake_pins: list of pin names that wake the device. Active
+        #   low, internally pulled up. Falls back to the emergency-push /
+        #   encoder button if left empty.
         #   - touch_int pin wakes on screen touch
         #   - wake_button_pin wakes on boot button press
+        # full_power_feeds_inputs: True when the FULL_POWER rail also powers
+        #   the wake inputs. Sleep then blanks the panel but leaves the rail
+        #   up, because cutting it would remove the only way to wake.
         "sleep_enabled": True,
         "sleep_timeout": 120,
         "sleep_mode": "light",
@@ -364,8 +369,13 @@ VARIANTS = {
         # speakers and the 3.5 mm jack. audio_output_default is only the
         # starting route, used until the first poll settles.
         "headset_detect_enabled": True,
-        "headset_poll_interval": 0.5,    # s between jack reads
-        "headset_debounce": 1.0,         # s a new state must hold
+        # Poll fast, settle slow. The jack detector chatters hard while a
+        # plug moves — measured 3/0/1/0/3/0/1/0 across four seconds on one
+        # insertion — so the debounce window has to span many samples, not
+        # two. At 0.1 s a 1 s settle needs ten consecutive agreeing reads;
+        # at the old 0.5 s it needed two, and rarely got them.
+        "headset_poll_interval": 0.1,    # s between jack reads
+        "headset_debounce": 1.0,         # s a reading must hold to count
         "audio_output_default": "headphone",
         "headphone_volume": 0,           # dB
         "headphone_left_gain": 9,        # dB
@@ -428,7 +438,13 @@ VARIANTS = {
         "sleep_enabled": False,
         "sleep_timeout": 120,
         "sleep_mode": "software_idle",
-        "sleep_wake_pins": [],
+        # Rotary encoder button (BUTTON1 = GPIO0); rotation also wakes.
+        # The planned MSPM0 input companion joins this list — wire its line
+        # active-low open-drain, which is what the poll expects.
+        "sleep_wake_pins": ["BUTTON1"],
+        # The D10 rail feeds the encoder and its button, so sleep must not
+        # cut it — doing so removes the only thing that can wake the board.
+        "full_power_feeds_inputs": True,
 
         "language_switcher_enabled": False,
     },
@@ -565,7 +581,9 @@ VARIANTS = {
         "sleep_enabled": False,
         "sleep_timeout": 120,
         "sleep_mode": "software_idle",
-        "sleep_wake_pins": [],
+        # Same board as FRUITJAM_CLONE_18, so the same sleep rules.
+        "sleep_wake_pins": ["BUTTON1"],
+        "full_power_feeds_inputs": True,
 
         "language_switcher_enabled": False,
     },

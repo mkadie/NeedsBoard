@@ -37,7 +37,13 @@ class AudioPlayer:
         self._sound_system = config["sound_system"]
         self._playback_speed = config.get("playback_speed", 100)
 
-        if self._sound_system == "FRUITJAM_DAC":
+        if self._sound_system == "NONE":
+            # Silent build: board has no reachable codec (e.g. a bring-up board
+            # whose I2C pull-ups aren't fitted yet). Everything else — display,
+            # menus, encoder — still runs; play() becomes a no-op.
+            self._audio = None
+            print("Audio: DISABLED (sound_system = NONE) — device will be silent")
+        elif self._sound_system == "FRUITJAM_DAC":
             self._init_fruitjam_dac(config, peripherals)
         else:
             self._init_i2s(config, i2c)
@@ -89,12 +95,15 @@ class AudioPlayer:
             except Exception as e:
                 print("headset detect init err:", type(e).__name__, e)
 
-        # Initial route: explicit config, otherwise auto from plug detection.
-        default_route = config.get(
-            "audio_output_default",
-            self._wanted_route_from(self._last_hp_status)
-            if self._headset_detect_enabled else "speaker",
-        )
+        # Initial route. When jack detection is on, what the codec actually
+        # reports wins: audio_output_default is a starting guess, and
+        # honouring it over a live reading meant booting with an empty jack
+        # routed to the headphone amp -- silent, with no plug event coming
+        # to correct it, because the poll only ever reacts to a *change*.
+        if self._headset_detect_enabled:
+            default_route = self._wanted_route_from(self._last_hp_status)
+        else:
+            default_route = config.get("audio_output_default", "speaker")
         self.audio_route = None  # set_audio_route fills it in
         self.set_audio_route(default_route)
         self._audio = peripherals.audio
@@ -168,19 +177,29 @@ class AudioPlayer:
         except Exception as e:
             print("headset_status read err:", type(e).__name__, e)
             return False
+        # Settle the reading first — the codec chatters between 0 and 3
+        # while a plug is going in.
         if hps != self._hp_pending_status:
             self._hp_pending_status = hps
             self._hp_pending_since = now
             return False
-        if (self._hp_pending_status != self._last_hp_status
-                and (now - self._hp_pending_since) >= self._hp_debounce):
-            self._last_hp_status = self._hp_pending_status
-            wanted = self._wanted_route_from(self._last_hp_status)
-            if wanted != self.audio_route and not self._audio.playing:
-                self.set_audio_route(wanted)
-                print("auto route: status=%d -> %s" %
-                      (self._last_hp_status, wanted))
-                return True
+        if (now - self._hp_pending_since) < self._hp_debounce:
+            return False
+        self._last_hp_status = self._hp_pending_status
+
+        # Reconcile the route against the settled status on every poll, not
+        # only on a transition. Acting on transitions alone lost the change
+        # for good whenever it landed while a sound was playing: the status
+        # was marked as seen, the route swap was skipped, and no further
+        # event was coming to retry it. Comparing state instead of edges
+        # makes this self-healing — any disagreement gets corrected as soon
+        # as the codec is idle.
+        wanted = self._wanted_route_from(self._last_hp_status)
+        if wanted != self.audio_route and not self._audio.playing:
+            self.set_audio_route(wanted)
+            print("auto route: status=%d -> %s" %
+                  (self._last_hp_status, wanted))
+            return True
         return False
 
     def _init_i2s(self, config, i2c):
@@ -223,6 +242,10 @@ class AudioPlayer:
         Args:
             sound_file: Path to the sound file (.mp3 or .wav).
         """
+        if self._audio is None:                  # sound_system = NONE
+            print("Audio: (silent) would play", sound_file)
+            return
+
         # Resolve path: SD card first, then flash
         if self._storage:
             sound_file = self._storage.resolve_path(sound_file)
@@ -275,10 +298,14 @@ class AudioPlayer:
     @property
     def playing(self):
         """True if audio is currently playing."""
+        if self._audio is None:                  # sound_system = NONE
+            return False
         return self._audio.playing
 
     def stop(self):
         """Stop current playback."""
+        if self._audio is None:                  # sound_system = NONE
+            return
         self._audio.stop()
 
     def set_playback_speed(self, speed):
