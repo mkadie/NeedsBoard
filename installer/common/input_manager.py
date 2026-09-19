@@ -68,6 +68,14 @@ class InputManager:
         if config.get("rotary_encoder", False):
             self._init_encoder(config)
 
+        # USB HID keyboard (Fruit Jam DVI variant)
+        self._kb_device = None
+        # Only _init_keyboard() sets the retry-timer state, so poll() must know
+        # whether it ran — encoder-only variants (FRUITJAM_V2) have no keyboard.
+        self._kb_enabled = config.get("input_type") == "USB_HID_KEYBOARD"
+        if self._kb_enabled:
+            self._init_keyboard(config)
+
         # Wake button
         self._wake_button = None
         self._wake_button_index = config.get("wake_button_index", 8)
@@ -78,6 +86,78 @@ class InputManager:
             self._wake_button.direction = digitalio.Direction.INPUT
             self._wake_button.pull = digitalio.Pull.UP
             self._last_wake = self._wake_button.value
+
+        # MSPM0 Seesaw button expander (optional, on the shared I2C bus).
+        # Buttons 0..7 map straight to menu selections 0..7. Probed at init —
+        # if the seesaw isn't powered/present the AAC just runs without it.
+        self._seesaw_i2c = None
+        if config.get("seesaw_buttons", False):
+            self._init_seesaw(i2c)
+
+    # Seesaw protocol: EVENT module 0x80, LEN=0x01, POP_ALL=0x02.
+    _SS_ADDR = 0x49
+    _SS_EVENT = 0x80
+    _SS_LEN = 0x01
+    _SS_POPALL = 0x02
+
+    def _init_seesaw(self, i2c):
+        """Probe for the seesaw at 0x49 and, if present, drain stale events."""
+        bus = i2c
+        if bus is None:
+            try:
+                import board
+                bus = board.STEMMA_I2C()
+            except Exception as e:
+                print("Seesaw: no I2C bus ({})".format(e))
+                return
+        try:
+            if not bus.try_lock():
+                print("Seesaw: I2C busy at init, skipping")
+                return
+            try:
+                present = self._SS_ADDR in bus.scan()
+                if present:
+                    # drain any power-on / selftest events so the first real
+                    # press isn't preceded by stale data
+                    bus.writeto(self._SS_ADDR,
+                                bytes([self._SS_EVENT, self._SS_POPALL]))
+                    bus.readfrom_into(self._SS_ADDR, bytearray(16))
+            finally:
+                bus.unlock()
+        except Exception as e:
+            print("Seesaw: probe failed ({})".format(e))
+            return
+        if present:
+            self._seesaw_i2c = bus
+            print("Seesaw button expander: found at 0x49 (buttons -> menu)")
+        else:
+            print("Seesaw button expander: not present (skipping)")
+
+    def _check_seesaw(self):
+        """Newest seesaw button id (0..7) from its EVENT FIFO -> menu index."""
+        bus = self._seesaw_i2c
+        if bus is None:
+            return None
+        try:
+            if not bus.try_lock():       # bus busy (e.g. DAC) — try next poll
+                return None
+            try:
+                bus.writeto(self._SS_ADDR, bytes([self._SS_EVENT, self._SS_LEN]))
+                ln = bytearray(1)
+                bus.readfrom_into(self._SS_ADDR, ln)
+                n = ln[0]
+                if not n:
+                    return None
+                data = bytearray(n)
+                bus.writeto(self._SS_ADDR,
+                            bytes([self._SS_EVENT, self._SS_POPALL]))
+                bus.readfrom_into(self._SS_ADDR, data)
+            finally:
+                bus.unlock()
+        except OSError:
+            return None
+        evs = [b for b in data if b < 8]    # ignore selftest markers (>=8)
+        return evs[-1] if evs else None
 
     def _init_touch(self, config, i2c):
         """Initialize capacitive touch controller."""
@@ -179,7 +259,19 @@ class InputManager:
         print("Direct buttons ready:", len(self._direct_buttons), "pins")
 
     def _init_encoder(self, config):
-        """Initialize rotary encoder and its push button."""
+        """Initialize rotary encoder and its push button.
+
+        Three input decode modes, selected by config:
+
+        - **pulse** (``encoder_pulse_mode = True``): A and B are read as
+          independent active-low pulse inputs. Each falling edge on A bumps
+          position +1; each falling edge on B bumps position -1. Used for
+          devices that emit a single short pulse per step (e.g. sip-n-puff
+          adapters) instead of a quadrature waveform.
+        - **hardware**: rotaryio.IncrementalEncoder. Default when available.
+        - **software**: bit-banged quadrature decode. Fallback when rotaryio
+          can't claim the PIO state machine.
+        """
 
         # Drive GND pin low if configured (uses GPIO as ground for encoder)
         gnd_pin_name = config.get("encoder_gnd_pin")
@@ -188,25 +280,11 @@ class InputManager:
             self._encoder_gnd.direction = digitalio.Direction.OUTPUT
             self._encoder_gnd.value = False
 
-        # Try hardware rotaryio first, fall back to software polling
         self._software_encoder = False
-        try:
-            import rotaryio
-            self._encoder = rotaryio.IncrementalEncoder(
-                _pin(config["encoder_pin_a"]),
-                _pin(config["encoder_pin_b"]),
-            )
-            # Test if it works with a quick read
-            _ = self._encoder.position
-        except Exception:
-            self._encoder = None
+        self._pulse_encoder = bool(config.get("encoder_pulse_mode", False))
 
-        # If rotaryio didn't work or no pull-ups, use software polling
-        if self._encoder is None or gnd_pin_name:
-            # Software encoder needs pull-ups — rotaryio may not set them
-            if self._encoder:
-                self._encoder.deinit()
-            self._software_encoder = True
+        if self._pulse_encoder:
+            # Pulse mode — independent active-low edge inputs on A and B.
             self._enc_a = digitalio.DigitalInOut(_pin(config["encoder_pin_a"]))
             self._enc_a.direction = digitalio.Direction.INPUT
             self._enc_a.pull = digitalio.Pull.UP
@@ -215,11 +293,42 @@ class InputManager:
             self._enc_b.pull = digitalio.Pull.UP
             self._enc_last_a = self._enc_a.value
             self._enc_last_b = self._enc_b.value
-            # Create a simple position tracker
-            class SoftEncoder:
+            class PulseEncoder:
                 def __init__(self):
                     self.position = 0
-            self._encoder = SoftEncoder()
+            self._encoder = PulseEncoder()
+        else:
+            # Try hardware rotaryio first, fall back to software polling
+            try:
+                import rotaryio
+                self._encoder = rotaryio.IncrementalEncoder(
+                    _pin(config["encoder_pin_a"]),
+                    _pin(config["encoder_pin_b"]),
+                )
+                # Test if it works with a quick read
+                _ = self._encoder.position
+            except Exception:
+                self._encoder = None
+
+            # If rotaryio didn't work or no pull-ups, use software polling
+            if self._encoder is None or gnd_pin_name:
+                # Software encoder needs pull-ups — rotaryio may not set them
+                if self._encoder:
+                    self._encoder.deinit()
+                self._software_encoder = True
+                self._enc_a = digitalio.DigitalInOut(_pin(config["encoder_pin_a"]))
+                self._enc_a.direction = digitalio.Direction.INPUT
+                self._enc_a.pull = digitalio.Pull.UP
+                self._enc_b = digitalio.DigitalInOut(_pin(config["encoder_pin_b"]))
+                self._enc_b.direction = digitalio.Direction.INPUT
+                self._enc_b.pull = digitalio.Pull.UP
+                self._enc_last_a = self._enc_a.value
+                self._enc_last_b = self._enc_b.value
+                # Create a simple position tracker
+                class SoftEncoder:
+                    def __init__(self):
+                        self.position = 0
+                self._encoder = SoftEncoder()
 
         self._last_encoder_pos = self._encoder.position
         btn_pin = _pin(config.get("encoder_button_pin"))
@@ -228,9 +337,171 @@ class InputManager:
             self._encoder_button.direction = digitalio.Direction.INPUT
             self._encoder_button.pull = digitalio.Pull.UP
             self._last_encoder_button = self._encoder_button.value
-        mode = "software" if self._software_encoder else "hardware"
+        if self._pulse_encoder:
+            mode = "pulse"
+        elif self._software_encoder:
+            mode = "software"
+        else:
+            mode = "hardware"
         print("Encoder ready: nav={} pos={} max={} mode={}".format(
             self._encoder_nav, self._last_encoder_pos, self._max_index, mode))
+
+    # ---- USB HID boot keyboard (Fruit Jam DVI variant) -----------------
+    # Uses adafruit_usb_host_descriptors.find_boot_keyboard_endpoint() which
+    # returns a (interface_num, ep_addr) tuple — pick the IN endpoint
+    # (bit 0x80 set). Requires /boot.py with usb_host.Port() to enable the
+    # PIO-USB host port. Don't call is_kernel_driver_active/detach_kernel_driver
+    # on CircuitPython USB host — those raise TypeError.
+
+    def _init_keyboard(self, config):
+        """Set up a USB HID boot keyboard. Lazy-attaches if absent at boot."""
+        pwr_name = config.get("usb_host_5v_power")
+        self._kb_5v = None
+        if pwr_name:
+            try:
+                self._kb_5v = digitalio.DigitalInOut(_pin(pwr_name))
+                self._kb_5v.direction = digitalio.Direction.OUTPUT
+                self._kb_5v.value = True
+            except Exception as e:
+                if self._debug:
+                    print("USB host 5V enable skipped:", e)
+        self._kb_device = None
+        self._kb_in_endpoint = 0x81
+        self._kb_report = bytearray(8)
+        self._kb_prev_keys = set()
+        self._kb_next_attempt = 0.0
+        self._kb_retry_period = 1.0
+        self._try_attach_keyboard()
+        print("USB keyboard input ready (attached={})".format(
+            self._kb_device is not None))
+
+    def _try_attach_keyboard(self):
+        try:
+            import usb.core
+            import adafruit_usb_host_descriptors as _usbhd
+        except ImportError as e:
+            if self._debug:
+                print("USB host libs missing:", e)
+            return
+        try:
+            devs = list(usb.core.find(find_all=True))
+        except Exception as e:
+            if self._debug:
+                print("usb.core.find failed:", type(e).__name__, repr(e))
+            return
+        for dev in devs:
+            try:
+                info = _usbhd.find_boot_keyboard_endpoint(dev)
+            except Exception as e:
+                if self._debug:
+                    print("kb descriptor parse failed:", type(e).__name__, repr(e))
+                continue
+            if info is None:
+                continue
+            if isinstance(info, tuple):
+                ep_addr = None
+                for x in info:
+                    if isinstance(x, int) and (x & 0x80):
+                        ep_addr = x
+                        break
+                if ep_addr is None:
+                    continue
+            else:
+                ep_addr = info
+            try:
+                dev.set_configuration()
+            except Exception as cfg_e:
+                if self._debug:
+                    print("set_configuration note:", type(cfg_e).__name__, cfg_e)
+            self._kb_device = dev
+            self._kb_in_endpoint = ep_addr
+            print("USB keyboard attached VID:%04x PID:%04x  ep=0x%02x" % (
+                dev.idVendor, dev.idProduct, ep_addr))
+            return
+
+    def _check_keyboard(self):
+        """Poll the USB keyboard. Returns button index or None."""
+        if not self._kb_enabled:
+            return None
+        if self._kb_device is None:
+            now = time.monotonic()
+            if now < self._kb_next_attempt:
+                return None
+            self._kb_next_attempt = now + self._kb_retry_period
+            self._try_attach_keyboard()
+            if self._kb_device is None:
+                return None
+        try:
+            self._kb_device.read(
+                self._kb_in_endpoint, self._kb_report, timeout=2,
+            )
+        except Exception as e:
+            name = type(e).__name__
+            msg = str(e).lower()
+            if "timeout" in msg or name == "USBTimeoutError":
+                return None
+            if self._debug:
+                print("kb read err, dropping:", name, repr(e))
+            self._kb_device = None
+            self._kb_prev_keys = set()
+            return None
+        keys_now = set(b for b in self._kb_report[2:8] if b)
+        new_keys = keys_now - self._kb_prev_keys
+        self._kb_prev_keys = keys_now
+        for code in new_keys:
+            result = self._handle_key(code)
+            if result is not None:
+                return result
+        return None
+
+    # HID usage codes
+    _KEY_RIGHT = 0x4F
+    _KEY_LEFT  = 0x50
+    _KEY_DOWN  = 0x51
+    _KEY_UP    = 0x52
+    _KEY_ENTER = 0x28
+    _KEY_SPACE = 0x2C
+    _KEY_1     = 0x1E   # 0x1E..0x26 -> 1..9
+    _KEY_9     = 0x26
+    _KEY_0     = 0x27
+
+    def _handle_key(self, code):
+        """Map an HID key code to a press event.
+
+        Arrow keys move the selected_index (matches encoder navigation).
+        Enter/Space activates the selected cell.
+        Number keys 1..9, 0 directly activate cells 0..9 (clamped to grid).
+        """
+        cols = self._config.get("button_cols", 4)
+        if code == self._KEY_UP:
+            self._move_selection(-cols)
+        elif code == self._KEY_DOWN:
+            self._move_selection(cols)
+        elif code == self._KEY_LEFT:
+            self._move_selection(-1)
+        elif code == self._KEY_RIGHT:
+            self._move_selection(1)
+        elif code in (self._KEY_ENTER, self._KEY_SPACE):
+            if self._debug:
+                print("Keyboard: activate", self._selected_index)
+            return self._selected_index
+        elif self._KEY_1 <= code <= self._KEY_9:
+            idx = code - self._KEY_1
+            if idx < self._max_index:
+                if self._debug:
+                    print("Keyboard: number", idx + 1, "->", idx)
+                return idx
+        elif code == self._KEY_0:
+            if 9 < self._max_index:
+                return 9
+        return None
+
+    def _move_selection(self, delta):
+        old = self._selected_index
+        self._selected_index = (self._selected_index + delta) % self._max_index
+        if self._debug:
+            print("Keyboard: select", self._selected_index,
+                  "(was", old, "delta", delta, ")")
 
     def poll(self):
         """Check all input sources for a button press.
@@ -250,8 +521,20 @@ class InputManager:
             self._last_press_time = now
             return result
 
+        # MSPM0 Seesaw buttons (0..7 -> menu selections)
+        result = self._check_seesaw()
+        if result is not None:
+            self._last_press_time = now
+            return result
+
         # Encoder button
         result = self._check_encoder()
+        if result is not None:
+            self._last_press_time = now
+            return result
+
+        # USB HID keyboard (FRUITJAM_DVI_KBD variant)
+        result = self._check_keyboard()
         if result is not None:
             self._last_press_time = now
             return result
@@ -397,6 +680,20 @@ class InputManager:
         if self._encoder is None:
             return None
 
+        # Pulse mode — independent active-low edge inputs on A and B.
+        # Each falling edge on A bumps position +1; on B bumps -1.
+        if self._pulse_encoder:
+            a = self._enc_a.value
+            b = self._enc_b.value
+            if a != self._enc_last_a:
+                if not a:                       # falling edge
+                    self._encoder.position += 1
+                self._enc_last_a = a
+            if b != self._enc_last_b:
+                if not b:                       # falling edge
+                    self._encoder.position -= 1
+                self._enc_last_b = b
+
         # Update software encoder — lookup table approach
         # Tracks all 4 state transitions, only counts valid sequences
         if self._software_encoder:
@@ -499,6 +796,16 @@ class InputManager:
             self._wake_button.direction = digitalio.Direction.INPUT
             self._wake_button.pull = digitalio.Pull.UP
             self._last_wake = self._wake_button.value
+
+    def _reinit_encoder_button(self):
+        """Reclaim encoder button pin after software idle wake."""
+        config = self._config
+        btn_pin = _pin(config.get("encoder_button_pin"))
+        if btn_pin and self._encoder_button is None:
+            self._encoder_button = digitalio.DigitalInOut(btn_pin)
+            self._encoder_button.direction = digitalio.Direction.INPUT
+            self._encoder_button.pull = digitalio.Pull.UP
+            self._last_encoder_button = self._encoder_button.value
 
     @property
     def debug(self):
