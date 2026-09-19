@@ -46,7 +46,15 @@ class SleepManager:
         self._enabled = config.get("sleep_enabled", False)
         self._timeout = config.get("sleep_timeout", 120)
         self._mode = config.get("sleep_mode", "light")
-        self._wake_pin_names = config.get("sleep_wake_pins", [])
+        # Resolved once so the alarm path, the software-idle poll and the
+        # startup banner all report the same list. Variants that declare
+        # nothing fall back to whatever button they already have.
+        self._wake_pin_names = list(config.get("sleep_wake_pins") or [])
+        if not self._wake_pin_names:
+            fallback = (config.get("emergency_push_pin")
+                        or config.get("encoder_button_pin"))
+            if fallback:
+                self._wake_pin_names = [fallback]
         self._config = config
 
         # Track last activity
@@ -84,7 +92,10 @@ class SleepManager:
                 self._timeout, self._mode))
             print("Sleep: wake pins:", self._wake_pin_names)
             if _HAS_SUPERVISOR and supervisor.runtime.usb_connected:
-                print("Sleep: USB connected — sleep suspended until unplugged")
+                if self._mode == "software_idle":
+                    print("Sleep: USB connected — software idle still applies")
+                else:
+                    print("Sleep: USB connected — sleep suspended until unplugged")
         else:
             print("Sleep: disabled")
 
@@ -201,14 +212,23 @@ class SleepManager:
 
         print("Sleep: entering software idle...")
 
-        # Turn off NeoPixel
-        if self._pixel:
-            self._pixel[0] = (0, 0, 0)
+        # Heavy: deinit Peripherals, cut FULL_POWER, reset on wake.
+        # Light: blank the panel and keep running.
+        #
+        # The choice is derived, not declared, because the failure it guards
+        # against is not obvious from a variant file: if the FULL_POWER rail
+        # also feeds the wake inputs, cutting it kills the very hardware that
+        # has to notice the wake, and the board never comes back. Variants
+        # state the board fact (full_power_feeds_inputs); the policy lives
+        # here so a user enabling sleep in config.txt cannot arm it by hand.
+        can_cut_power = (self._peripherals is not None
+                         or self._full_power is not None)
+        if can_cut_power and self._config.get("full_power_feeds_inputs", False):
+            print("Sleep: FULL_POWER feeds the wake inputs — staying powered")
+            can_cut_power = False
+        heavy_sleep = can_cut_power
 
-        # Determine if this is a heavy sleep (needs reset) or light (just display off)
-        needs_reset = self._peripherals is not None or self._full_power is not None
-
-        if needs_reset:
+        if heavy_sleep:
             # Heavy path: Fruit Jam — deinit hardware, reset on wake
             if self._peripherals:
                 self._peripherals.deinit()
@@ -228,27 +248,37 @@ class SleepManager:
                     self._full_power.value = self._full_power_active_low
                 print("Sleep: FULL_POWER OFF")
         else:
-            # Light path: OLED badge — just turn display off
+            # Light path: blank the panel, keep the board powered so the
+            # wake inputs stay alive. SLPIN drops the ST7735R/ILI9341 to
+            # ~0.1 mA, SSD1306 to ~10 uA. _power_down() handles backlight,
+            # amplifier and NeoPixel where a variant has them (all three are
+            # unwired on the Fruit Jam clone, but the OLED badge uses them).
+            self._power_down()
             if self._display:
                 self._display.sleep_display()
-                print("Sleep: display off")
+                print("Sleep: display off (light sleep — hardware stays up)")
 
-        # Poll for wake — check button press and encoder rotation
+        # Poll for wake — declared wake pins, plus encoder rotation.
         print("Sleep: idle, polling for wake...")
-        wake_btn = None
-        wake_pin_name = self._config.get("emergency_push_pin",
-                                         self._config.get("encoder_button_pin"))
-        if wake_pin_name:
-            # Release encoder button so we can claim the pin for wake polling
-            if self._input and hasattr(self._input, '_encoder_button'):
-                eb = self._input._encoder_button
-                if eb:
-                    eb.deinit()
-                    self._input._encoder_button = None
-            pin = _pin(wake_pin_name)
-            wake_btn = digitalio.DigitalInOut(pin)
-            wake_btn.direction = digitalio.Direction.INPUT
-            wake_btn.pull = digitalio.Pull.UP
+
+        # InputManager holds the encoder button; hand it back unconditionally
+        # so the pin is free to claim below. Testing whether it is "one of the
+        # wake pins" by name would miss a variant spelling the same physical
+        # pin under another board alias (BUTTON1 and GPIO0 are one pin here),
+        # and the light path reclaims it on wake anyway.
+        if self._input and getattr(self._input, "_encoder_button", None):
+            self._input._encoder_button.deinit()
+            self._input._encoder_button = None
+
+        wake_btns = []
+        for name in self._wake_pin_names:
+            try:
+                btn = digitalio.DigitalInOut(_pin(name))
+                btn.direction = digitalio.Direction.INPUT
+                btn.pull = digitalio.Pull.UP
+                wake_btns.append((name, btn))
+            except Exception as e:
+                print("Sleep: wake pin {} unavailable: {}".format(name, e))
 
         encoder = None
         last_pos = 0
@@ -257,48 +287,60 @@ class SleepManager:
             if encoder:
                 last_pos = encoder.position
 
-        # Also check I2C expander buttons if available
-        expander_pins = None
-        if self._input and hasattr(self._input, '_expander_pins'):
-            expander_pins = self._input._expander_pins
+        # I2C expander buttons are just more active-low inputs; folding them
+        # into one list keeps the poll a single shape instead of three.
+        expander_pins = getattr(self._input, "_expander_pins", None) or []
+        wake_inputs = wake_btns + [("expander", p) for p in expander_pins]
+
+        # Refuse to sleep with nothing able to wake us — that is how a device
+        # goes quiet for good. The alarm path already takes this stance.
+        if not wake_inputs and encoder is None:
+            print("Sleep: no wake source available — staying awake")
+            if not heavy_sleep:
+                if self._display:
+                    self._display.wake_display()
+                self._power_up()
+            if self._input and hasattr(self._input, '_reinit_encoder_button'):
+                self._input._reinit_encoder_button()
+            self._last_activity = time.monotonic()
+            return False
+
+        print("Sleep: wake sources:",
+              ", ".join([n for n, _ in wake_inputs] +
+                        (["encoder rotation"] if encoder else [])))
 
         while True:
-            if wake_btn and not wake_btn.value:
-                print("Sleep: button wake!")
-                break
-            if encoder:
-                pos = encoder.position
-                if pos != last_pos:
-                    print("Sleep: encoder wake (pos {} -> {})".format(
-                        last_pos, pos))
+            woke_on = None
+            for name, pin in wake_inputs:
+                if not pin.value:          # active low
+                    woke_on = name
                     break
-            if expander_pins:
-                for pin in expander_pins:
-                    if not pin.value:  # Active low
-                        print("Sleep: I2C button wake!")
-                        break
-                else:
-                    time.sleep(0.1)
-                    continue
-                break  # Inner break hit — exit outer loop
-            else:
-                time.sleep(0.1)
+            if woke_on:
+                print("Sleep: wake from", woke_on)
+                break
+            if encoder and encoder.position != last_pos:
+                print("Sleep: encoder wake (pos {} -> {})".format(
+                    last_pos, encoder.position))
+                break
+            time.sleep(0.1)
 
-        if wake_btn:
-            wake_btn.deinit()
+        for _name, btn in wake_btns:
+            btn.deinit()   # expander pins belong to InputManager; leave them
 
         # Reset button latch to stop vibration motors
         if self._input and hasattr(self._input, 'reset_button_latch'):
             self._input.reset_button_latch()
 
-        if needs_reset:
+        if heavy_sleep:
             # Heavy wake: full device reset
             self._wake_from_idle()
         else:
-            # Light wake: turn display back on, reinit encoder button
+            # Light wake: panel back on, then restore whatever
+            # _power_down() turned off, then reclaim the encoder button.
             if self._display:
                 self._display.wake_display()
                 print("Sleep: display on")
+            self._power_up()
             if self._input and hasattr(self._input, '_reinit_encoder_button'):
                 self._input._reinit_encoder_button()
 
