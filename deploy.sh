@@ -93,6 +93,24 @@ deploy_to() {
             [ -f "$f" ] && cp "$f" "$mount/button_sounds/"
         done
         echo "  Button sounds deployed"
+
+        # Copying never removes, so a renamed asset leaves its old name on
+        # the device forever -- that is how retired board art kept shipping.
+        # Report rather than delete: the device legitimately carries content
+        # the repo does not have (button_sounds/languages/, for one), so
+        # deciding what is stale is a human's call.
+        orphans=""
+        for sub in menus button_sounds; do
+            [ -d "$mount/$sub" ] || continue
+            while IFS= read -r dev; do
+                rel="${dev#$mount/}"
+                [ -e "$SCRIPT_DIR/$rel" ] || orphans="$orphans  $rel"$'\n'
+            done < <(find "$mount/$sub" -type f ! -name '.*' 2>/dev/null)
+        done
+        if [ -n "$orphans" ]; then
+            echo "  NOTE: on the device but not in the repo (stale?):"
+            printf '%s' "$orphans"
+        fi
     fi
 
     sync

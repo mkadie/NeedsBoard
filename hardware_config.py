@@ -359,8 +359,13 @@ VARIANTS = {
         "dac_volume": -10,       # dB
         "speaker_volume": 0,     # dB
         "speaker_gain": 24,      # dB
-        # Headset auto-detect is off here, so pin the route to the jack —
-        # without this AudioPlayer falls back to "speaker".
+        # Auto-route on plug/unplug: the TLV320 reports jack state and
+        # AudioPlayer.poll_headset_detect() switches between the onboard
+        # speakers and the 3.5 mm jack. audio_output_default is only the
+        # starting route, used until the first poll settles.
+        "headset_detect_enabled": True,
+        "headset_poll_interval": 0.5,    # s between jack reads
+        "headset_debounce": 1.0,         # s a new state must hold
         "audio_output_default": "headphone",
         "headphone_volume": 0,           # dB
         "headphone_left_gain": 9,        # dB

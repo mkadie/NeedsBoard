@@ -8,7 +8,8 @@
 #  Layout (3 columns × 2 rows):
 #
 #  +----------+----------+----------+
-#  |   Yes    |    No    |Thank You |
+#  |   Yes    |    No    | Please & |
+#  |          |          |Thank You |
 #  |    1     |    2     |    3     |
 #  +----------+----------+----------+
 #  | Bathroom |   Play   |Food/Drink|
@@ -41,10 +42,10 @@ sound = /button_sounds/no.mp3
 position = 2
 
 [thankyou]
-label = Thank You
-text_description = Thank you
+label = Please and Thank You
+text_description = Please and thank you
 image = images/base/thankyou.bmp
-sound = /button_sounds/thank_you.mp3
+sound = /button_sounds/please_and_thank_you.mp3
 position = 3
 
 # ----- Bottom Row -----
