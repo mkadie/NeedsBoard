@@ -482,6 +482,11 @@ class Machine:
             if self._emergency_hold_enabled:
                 self._check_emergency_hold()
             self._check_lang_encoder()
+            # Auto-route speaker <-> headphone on plug/unplug. AudioPlayer has
+            # always had poll_headset_detect(), but nothing ever called it, so
+            # headset_detect_enabled did nothing on any variant that set it.
+            # The poll rate-limits itself and no-ops while a sound is playing.
+            self.audio.poll_headset_detect()
             time.sleep(0.01)
 
     def _check_lang_encoder(self):
