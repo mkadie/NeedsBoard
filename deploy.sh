@@ -10,8 +10,8 @@
 #
 # Usage:
 #   ./deploy.sh              # Deploy to all connected devices
-#   ./deploy.sh fruitjam     # Deploy only to Fruit Jam (CIRCUITPY)
-#   ./deploy.sh badge        # Deploy only to Badge (CIRCUITPY1)
+#   ./deploy.sh CIRCUITPY1           # only that drive
+#   ./deploy.sh FRUITJAM_CLONE_18    # only boards declaring that variant
 #   ./deploy.sh --code-only  # Deploy only Python files (skip menus/sounds)
 
 set -e
@@ -133,12 +133,44 @@ if [ "$CODE_ONLY" = false ]; then
     echo ""
 fi
 
-if [ -z "$TARGET" ] || [ "$TARGET" = "fruitjam" ]; then
-    deploy_to "/media/$USER/CIRCUITPY" "Fruit Jam"
-fi
+# Every mounted CIRCUITPY drive, named by what the board says it is.
+#
+# The old fixed table (CIRCUITPY = "Fruit Jam", CIRCUITPY1 = "OLED Badge")
+# could not see a third board at all, and udisks hands out the numeric
+# suffix by mount order -- so the labels move between sessions and the names
+# were regularly wrong about which board was which. A device already
+# declares its identity in its own config.txt; read that instead.
+found=0
+for mount in "/media/$USER"/CIRCUITPY*; do
+    [ -d "$mount" ] || continue
 
-if [ -z "$TARGET" ] || [ "$TARGET" = "badge" ]; then
-    deploy_to "/media/$USER/CIRCUITPY1" "OLED Badge"
+    label="$(basename "$mount")"
+    variant="$(sed -n 's/^[[:space:]]*variant[[:space:]]*=[[:space:]]*//p' \
+                   "$mount/config.txt" 2>/dev/null | head -1)"
+    uid="$(sed -n 's/^UID:*//p' "$mount/boot_out.txt" 2>/dev/null | head -1)"
+    name="${variant:-unconfigured}"
+    [ -n "$uid" ] && name="$name  [UID $uid]"
+
+    # A target argument matches the drive label or the declared variant, so
+    # "./deploy.sh FRUITJAM_CLONE_18" picks a board regardless of where it
+    # happens to have mounted this time.
+    if [ -n "$TARGET" ]; then
+        case "$TARGET" in
+            "$label"|"$variant") ;;
+            *) continue ;;
+        esac
+    fi
+
+    found=$((found + 1))
+    deploy_to "$mount" "$name"
+done
+
+if [ "$found" -eq 0 ]; then
+    if [ -n "$TARGET" ]; then
+        echo "No CIRCUITPY drive matching '$TARGET'."
+    else
+        echo "No CIRCUITPY drive found under /media/$USER/."
+    fi
 fi
 
 echo "Deploy complete."

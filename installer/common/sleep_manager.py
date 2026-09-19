@@ -92,8 +92,8 @@ class SleepManager:
                 self._timeout, self._mode))
             print("Sleep: wake pins:", self._wake_pin_names)
             if _HAS_SUPERVISOR and supervisor.runtime.usb_connected:
-                if self._mode == "software_idle":
-                    print("Sleep: USB connected — software idle still applies")
+                if self._config.get("sleep_on_usb", False):
+                    print("Sleep: USB connected — sleeping anyway (sleep_on_usb)")
                 else:
                     print("Sleep: USB connected — sleep suspended until unplugged")
         else:
@@ -134,11 +134,16 @@ class SleepManager:
         if not self._enabled:
             return False
 
-        # Don't sleep while connected to USB — light sleep causes
-        # USB disconnect which triggers auto-reload (looks like a reboot).
-        # Software idle is safe over USB (no USB disconnect), so allow it.
+        # USB means external power, and on a board with a battery it means
+        # charging. There is nothing to save, and a device that blanks itself
+        # on the charger just looks broken. Software idle used to be exempted
+        # here because it does not drop the USB link the way light sleep
+        # does -- but "can" is not "should".
+        #
+        # sleep_on_usb re-enables it, which bench work needs: sleeping on the
+        # cable is the only way to watch a sleep cycle over serial.
         if _HAS_SUPERVISOR and supervisor.runtime.usb_connected:
-            if self._mode != "software_idle":
+            if not self._config.get("sleep_on_usb", False):
                 return False
 
         elapsed = time.monotonic() - self._last_activity

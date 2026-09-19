@@ -94,6 +94,11 @@ VARIANTS = {
         # full_power_feeds_inputs: True when the FULL_POWER rail also powers
         #   the wake inputs. Sleep then blanks the panel but leaves the rail
         #   up, because cutting it would remove the only way to wake.
+        # full_power_feeds_display: same idea, but the rail powers the panel.
+        # sleep_on_usb: sleep even while USB is connected. Off by default --
+        #   USB means external power (and charging), so there is nothing to
+        #   save. Turn it on for bench work, where sleeping on the cable is
+        #   the only way to watch a sleep cycle over serial.
         "sleep_enabled": True,
         "sleep_timeout": 120,
         "sleep_mode": "light",
