@@ -89,8 +89,9 @@ class AudioPlayer:
                 # detect_debounce=4 -> 256 ms hardware debounce
                 peripherals.dac.set_headset_detect(
                     True, detect_debounce=4, button_debounce=2)
-                time.sleep(0.5)
-                self._last_hp_status = peripherals.dac.headset_status
+                time.sleep(0.2)
+                self._last_hp_status = self._settle_headset_status(
+                    peripherals.dac)
                 self._hp_pending_status = self._last_hp_status
             except Exception as e:
                 print("headset detect init err:", type(e).__name__, e)
@@ -153,6 +154,36 @@ class AudioPlayer:
         1 = headphone-no-mic, 3 = headset+mic -> headphone.
         """
         return "speaker" if status == 0 else "headphone"
+
+    def _settle_headset_status(self, dac, timeout=1.5, need=5):
+        """Read the jack until the value holds still, or report empty.
+
+        A single reading taken just after enabling detection is not
+        trustworthy: the detector can briefly report a plug that is not
+        there, and the device then boots routed to a headphone amp with
+        nothing in the socket -- silent, and it stays that way until a real
+        plug event happens to correct it.
+
+        Requiring the reading to repeat costs a fraction of a second at
+        startup. If it will not settle, report 0 (empty): erring towards the
+        onboard speaker is audible in the room, while erring towards the
+        jack is silence.
+        """
+        stable = 0
+        value = 0
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            reading = dac.headset_status
+            if reading == value:
+                stable += 1
+                if stable >= need:
+                    return value
+            else:
+                value = reading
+                stable = 1
+            time.sleep(0.08)
+        print("Audio: jack reading unsettled — assuming nothing plugged in")
+        return 0
 
     def poll_headset_detect(self):
         """Poll the 3.5 mm jack and auto-route on a stable plug change.
