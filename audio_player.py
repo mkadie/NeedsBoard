@@ -157,6 +157,58 @@ class AudioPlayer:
         time.sleep(0.2)
         return self._settle_headset_status(dac)
 
+    def reinit_after_wake(self):
+        """Reprogram the codec after a sleep, and re-pick the route.
+
+        Sleep can cut the rail the codec sits on, and on battery that rail
+        is its only supply -- so it comes back at power-on defaults with
+        every register lost. Software still believed it was on the speaker,
+        and because set_audio_route() only reprograms the chip when its own
+        value CHANGES, nothing was ever re-applied. The device woke wired to
+        whatever the defaults were and ignored the socket from then on.
+
+        So this re-applies everything unconditionally rather than trusting
+        the cached state: clocks, jack detection, route and levels. It is
+        cheap and idempotent, and it is correct whether or not the codec
+        actually lost power -- which differs between USB and battery, and is
+        not worth trying to detect.
+        """
+        if self._sound_system != "FRUITJAM_DAC":
+            return False
+        dac = self._peripherals.dac
+
+        try:
+            dac.configure_clocks(sample_rate=self._current_rate, bit_depth=16)
+        except Exception as e:
+            print("Audio: clock reconfigure failed:", type(e).__name__, e)
+
+        status = 0
+        if self._headset_detect_enabled:
+            try:
+                status = self._arm_headset_detect(dac)
+            except Exception as e:
+                print("Audio: jack re-arm failed:", type(e).__name__, e)
+            self._last_hp_status = status
+            self._hp_pending_status = status
+            self._hp_pending_since = time.monotonic()
+            self._last_hp_poll = 0.0
+            wanted = self._wanted_route_from(status)
+        else:
+            wanted = self.audio_route or self._config.get(
+                "audio_output_default", "speaker")
+
+        # Drop the cached value so set_audio_route always reaches the chip.
+        # Skipping this is what left the codec unprogrammed after a wake.
+        self.audio_route = None
+        try:
+            self.set_audio_route(wanted)
+            print("Audio: codec reprogrammed after wake — status=%d route=%s"
+                  % (status, wanted))
+        except Exception as e:
+            print("Audio: route restore failed:", type(e).__name__, e)
+            return False
+        return True
+
     def resync_headset_detect(self):
         """Re-arm jack detection and re-pick the route after waking.
 
