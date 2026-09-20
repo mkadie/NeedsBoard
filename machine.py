@@ -473,6 +473,10 @@ class Machine:
                 if woke:
                     wake_until = time.monotonic() + wake_grace
                     print("Wake grace: ignoring input for {}s".format(wake_grace))
+                    # The codec's jack detection does not survive sleep on
+                    # every board; without this the socket stops working
+                    # after the first wake.
+                    self.audio.resync_headset_detect()
             # Keyboard/encoder navigation: keep the highlight + hint text in
             # sync with the current selection as it moves between presses.
             if (self._has_encoder_nav

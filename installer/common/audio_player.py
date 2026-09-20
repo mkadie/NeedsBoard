@@ -86,12 +86,7 @@ class AudioPlayer:
 
         if self._headset_detect_enabled:
             try:
-                # detect_debounce=4 -> 256 ms hardware debounce
-                peripherals.dac.set_headset_detect(
-                    True, detect_debounce=4, button_debounce=2)
-                time.sleep(0.2)
-                self._last_hp_status = self._settle_headset_status(
-                    peripherals.dac)
+                self._last_hp_status = self._arm_headset_detect(peripherals.dac)
                 self._hp_pending_status = self._last_hp_status
             except Exception as e:
                 print("headset detect init err:", type(e).__name__, e)
@@ -154,6 +149,53 @@ class AudioPlayer:
         1 = headphone-no-mic, 3 = headset+mic -> headphone.
         """
         return "speaker" if status == 0 else "headphone"
+
+    def _arm_headset_detect(self, dac):
+        """Enable jack detection on the codec and return a settled reading."""
+        # detect_debounce=4 -> 256 ms hardware debounce
+        dac.set_headset_detect(True, detect_debounce=4, button_debounce=2)
+        time.sleep(0.2)
+        return self._settle_headset_status(dac)
+
+    def resync_headset_detect(self):
+        """Re-arm jack detection and re-pick the route after waking.
+
+        set_headset_detect() was only ever called once, at startup, and the
+        codec's detect configuration does not survive a sleep cycle on every
+        board. Waking could leave the detector stuck on whatever it last
+        reported: the route then settled on that value and the socket stopped
+        having any effect at all -- plugging in, playing, and unplugging
+        changed nothing.
+
+        Re-arming costs a fraction of a second on wake and makes the jack
+        behave the same before and after sleep.
+        """
+        if not self._headset_detect_enabled:
+            return False
+        if self._sound_system != "FRUITJAM_DAC":
+            return False
+        try:
+            status = self._arm_headset_detect(self._peripherals.dac)
+        except Exception as e:
+            print("Audio: jack re-arm failed:", type(e).__name__, e)
+            return False
+
+        # Reset the debounce state too, so the poll judges the fresh reading
+        # rather than comparing it against whatever was pending before sleep.
+        self._last_hp_status = status
+        self._hp_pending_status = status
+        self._hp_pending_since = time.monotonic()
+        self._last_hp_poll = 0.0
+
+        wanted = self._wanted_route_from(status)
+        if wanted != self.audio_route:
+            self.set_audio_route(wanted)
+            print("Audio: jack re-armed after wake — status=%d -> %s"
+                  % (status, wanted))
+        else:
+            print("Audio: jack re-armed after wake — status=%d, route %s"
+                  % (status, self.audio_route))
+        return True
 
     def _settle_headset_status(self, dac, timeout=1.5, need=5):
         """Read the jack until the value holds still, or report empty.
