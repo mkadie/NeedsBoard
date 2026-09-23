@@ -366,7 +366,11 @@ VARIANTS = {
         # disable it -- but TI says ON must not float, so drive it low.
         "full_power_off_release": False,
         "full_power_settle_ms": 100,
-        "periph_reset_pin": None,
+        # Held HIGH the audio chip runs; pulled LOW it is in reset, which
+        # is what stops the speaker hiss and its idle current draw.
+        # Dropped during sleep, and after periph_idle_timeout of quiet.
+        "periph_reset_pin": "PERIPH_RESET",
+        "periph_idle_timeout": 15,   # s of silence before reset
 
         # Audio — TLV320DAC3100 via Fruit Jam Peripherals, now that the I2C
         # pull-ups are fitted (see note 3 above). Levels match FRUITJAM_V2;
@@ -538,7 +542,11 @@ VARIANTS = {
         # disable it -- but TI says ON must not float, so drive it low.
         "full_power_off_release": False,
         "full_power_settle_ms": 100,
-        "periph_reset_pin": None,
+        # Held HIGH the audio chip runs; pulled LOW it is in reset, which
+        # is what stops the speaker hiss and its idle current draw.
+        # Dropped during sleep, and after periph_idle_timeout of quiet.
+        "periph_reset_pin": "PERIPH_RESET",
+        "periph_idle_timeout": 15,   # s of silence before reset
 
         # Audio — OFF. See the header note: without pull-ups the DAC is
         # unreachable and Peripherals() takes the board into safe mode.
@@ -668,7 +676,11 @@ VARIANTS = {
         "full_power_active_low": True,
         "full_power_off_release": True,   # disable by releasing, not driving high
         "full_power_settle_ms": 100,
-        "periph_reset_pin": None,
+        # Held HIGH the audio chip runs; pulled LOW it is in reset, which
+        # is what stops the speaker hiss and its idle current draw.
+        # Dropped during sleep, and after periph_idle_timeout of quiet.
+        "periph_reset_pin": "PERIPH_RESET",
+        "periph_idle_timeout": 15,   # s of silence before reset
 
         # Audio — OFF. See the header note: without pull-ups the DAC is
         # unreachable and Peripherals() takes the board into safe mode.

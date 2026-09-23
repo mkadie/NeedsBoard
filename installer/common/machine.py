@@ -207,6 +207,7 @@ class Machine:
         # Sleep / power management
         self.sleep = SleepManager(self._config)
         self.sleep.set_pixel(self._pixel)
+        self.sleep.set_audio(self.audio)
         self.sleep.set_input(self.input)
         self.sleep.set_display(self.display)
         if self._peripherals:
@@ -487,6 +488,9 @@ class Machine:
             # headset_detect_enabled did nothing on any variant that set it.
             # The poll rate-limits itself and no-ops while a sound is playing.
             self.audio.poll_headset_detect()
+            # Drop the amp into reset once it has been quiet long enough --
+            # it hisses and draws current the whole time it is running.
+            self.audio.poll_amp_idle()
             time.sleep(0.01)
 
     def _check_lang_encoder(self):
