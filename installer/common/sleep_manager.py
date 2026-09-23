@@ -78,8 +78,9 @@ class SleepManager:
         # the inactive level. Used by boards whose enable net must float off.
         self._full_power_off_release = config.get("full_power_off_release", False)
         self._full_power_settle_ms = config.get("full_power_settle_ms", 500)
-        self._periph_reset_pin_name = config.get("periph_reset_pin")
-        self._periph_reset = None  # DigitalInOut, claimed during idle
+        # The peripheral-reset pin belongs to AudioPlayer -- one owner, so
+        # sleep, the idle timeout and playback cannot fight over it.
+        self._audio_player = None
 
         # If alarm module not available, fall back to software_idle
         if self._enabled and not _HAS_ALARM:
@@ -110,6 +111,10 @@ class SleepManager:
     def set_display(self, display_manager):
         """Set DisplayManager reference for backlight control."""
         self._display = display_manager
+
+    def set_audio(self, audio_player):
+        """AudioPlayer, so sleep can silence the amp before idling."""
+        self._audio_player = audio_player
 
     def set_peripherals(self, peripherals):
         """Set Fruit Jam Peripherals reference for software_idle shutdown."""
@@ -241,43 +246,27 @@ class SleepManager:
             elif self._config.get("full_power_feeds_display", False):
                 print("Sleep: FULL_POWER feeds the panel — staying powered")
                 cut_rail = False
-        heavy_sleep = False          # the reset-on-wake path is retired
+        # Silence the amplifier first: held in reset it stops hissing and
+        # stops drawing. This used to live in a heavy-sleep branch that was
+        # retired, which left it never running at all.
+        if self._audio_player is not None:
+            self._audio_player.prepare_for_sleep()
 
-        if heavy_sleep:
-            # Heavy path: Fruit Jam — deinit hardware, reset on wake
-            if self._peripherals:
-                self._peripherals.deinit()
-                print("Sleep: Peripherals deinited")
+        # Blank the panel and turn off whatever has its own pin (backlight,
+        # amplifier, NeoPixel) on variants that wire them.
+        self._power_down()
+        if self._display:
+            self._display.sleep_display()
+            print("Sleep: display off")
 
-            if self._periph_reset_pin_name:
-                pin = _pin(self._periph_reset_pin_name)
-                self._periph_reset = digitalio.DigitalInOut(pin)
-                self._periph_reset.direction = digitalio.Direction.OUTPUT
-                self._periph_reset.value = False
-                print("Sleep: PERIPH_RESET held LOW")
-
-            if self._full_power:
-                if self._full_power_off_release:
-                    self._full_power.switch_to_input()
-                else:
-                    self._full_power.value = self._full_power_active_low
-                print("Sleep: FULL_POWER OFF")
-        else:
-            # Blank the panel and turn off whatever has its own pin
-            # (backlight, amplifier, NeoPixel) on variants that wire them.
-            self._power_down()
-            if self._display:
-                self._display.sleep_display()
-                print("Sleep: display off")
-
-            # Then drop the rail, where the board allows it. This is the
-            # only way to darken a backlight that has no pin of its own.
-            if cut_rail:
-                if self._full_power_off_release:
-                    self._full_power.switch_to_input()
-                else:
-                    self._full_power.value = self._full_power_active_low
-                print("Sleep: FULL_POWER OFF (rail down)")
+        # Then drop the rail, where the board allows it. This is the only
+        # way to darken a backlight that has no pin of its own.
+        if cut_rail:
+            if self._full_power_off_release:
+                self._full_power.switch_to_input()
+            else:
+                self._full_power.value = self._full_power_active_low
+            print("Sleep: FULL_POWER OFF (rail down)")
 
         # Poll for wake — declared wake pins, plus encoder rotation.
         print("Sleep: idle, polling for wake...")
@@ -317,10 +306,11 @@ class SleepManager:
         # goes quiet for good. The alarm path already takes this stance.
         if not wake_inputs and encoder is None:
             print("Sleep: no wake source available — staying awake")
-            if not heavy_sleep:
-                if self._display:
-                    self._display.wake_display()
-                self._power_up()
+            if self._display:
+                self._display.wake_display()
+            self._power_up()
+            if self._audio_player is not None:
+                self._audio_player.amp_wake()
             if self._input and hasattr(self._input, '_reinit_encoder_button'):
                 self._input._reinit_encoder_button()
             self._last_activity = time.monotonic()
@@ -352,26 +342,23 @@ class SleepManager:
         if self._input and hasattr(self._input, 'reset_button_latch'):
             self._input.reset_button_latch()
 
-        if heavy_sleep:
-            # Heavy wake: full device reset
-            self._wake_from_idle()
-        else:
-            # Wake in place. Rail first: the panel has no power until it is
-            # back, and the controller lost its configuration with it, so the
-            # display is rebuilt rather than merely repainted.
-            if cut_rail and self._full_power:
-                self._full_power.switch_to_output(
-                    value=not self._full_power_active_low)
-                time.sleep(self._full_power_settle_ms / 1000.0)
-                print("Sleep: FULL_POWER ON (rail up)")
-                if self._display:
-                    self._display.rebuild()
+        # Wake in place.
+        # Wake in place. Rail first: the panel has no power until it is
+        # back, and the controller lost its configuration with it, so the
+        # display is rebuilt rather than merely repainted.
+        if cut_rail and self._full_power:
+            self._full_power.switch_to_output(
+                value=not self._full_power_active_low)
+            time.sleep(self._full_power_settle_ms / 1000.0)
+            print("Sleep: FULL_POWER ON (rail up)")
             if self._display:
-                self._display.wake_display()
-                print("Sleep: display on")
-            self._power_up()
-            if self._input and hasattr(self._input, '_reinit_encoder_button'):
-                self._input._reinit_encoder_button()
+                self._display.rebuild()
+        if self._display:
+            self._display.wake_display()
+            print("Sleep: display on")
+        self._power_up()
+        if self._input and hasattr(self._input, '_reinit_encoder_button'):
+            self._input._reinit_encoder_button()
 
         self._last_activity = time.monotonic()
         return True
