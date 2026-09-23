@@ -37,6 +37,17 @@ class AudioPlayer:
         self._sound_system = config["sound_system"]
         self._playback_speed = config.get("playback_speed", 100)
 
+        # Amplifier / peripheral reset. Held HIGH the chip runs; pulled LOW
+        # it is held in reset, which is what stops the speaker hiss and the
+        # idle current it draws. Claimed here rather than in SleepManager so
+        # one object owns the pin -- sleep, idle timeout and playback all
+        # have to agree about it.
+        self._periph_reset_pin_name = config.get("periph_reset_pin")
+        self._periph_reset = None
+        self._periph_idle_timeout = config.get("periph_idle_timeout", 15)
+        self._periph_idle = False
+        self._last_play_end = time.monotonic()
+
         if self._sound_system == "NONE":
             # Silent build: board has no reachable codec (e.g. a bring-up board
             # whose I2C pull-ups aren't fitted yet). Everything else — display,
@@ -86,11 +97,7 @@ class AudioPlayer:
 
         if self._headset_detect_enabled:
             try:
-                # detect_debounce=4 -> 256 ms hardware debounce
-                peripherals.dac.set_headset_detect(
-                    True, detect_debounce=4, button_debounce=2)
-                time.sleep(0.5)
-                self._last_hp_status = peripherals.dac.headset_status
+                self._last_hp_status = self._arm_headset_detect(peripherals.dac)
                 self._hp_pending_status = self._last_hp_status
             except Exception as e:
                 print("headset detect init err:", type(e).__name__, e)
@@ -114,6 +121,74 @@ class AudioPlayer:
                 self._dac_volume, self._speaker_volume, self._speaker_gain,
                 self._headphone_volume, self._headphone_left_gain,
                 self._headphone_right_gain, self._last_hp_status))
+
+    def _claim_periph_reset(self):
+        """Claim the peripheral-reset pin, driven to its active (HIGH) level."""
+        if self._periph_reset is not None or not self._periph_reset_pin_name:
+            return
+        import digitalio
+
+        try:
+            self._periph_reset = digitalio.DigitalInOut(
+                _pin(self._periph_reset_pin_name))
+            self._periph_reset.switch_to_output(value=True)
+        except Exception as e:
+            print("Audio: PERIPH_RESET unavailable:", type(e).__name__, e)
+            self._periph_reset = None
+
+    def amp_idle(self):
+        """Hold the audio peripheral in reset.
+
+        This is what actually silences the speaker between sounds. Leaving
+        it running hisses continuously and draws current for nothing, which
+        matters most in sleep -- where the whole point is to stop drawing.
+        """
+        self._claim_periph_reset()
+        if self._periph_reset is None or self._periph_idle:
+            return False
+        self._periph_reset.value = False
+        self._periph_idle = True
+        print("Audio: amp held in reset (idle)")
+        return True
+
+    def amp_wake(self):
+        """Release the peripheral from reset and reprogram it.
+
+        Coming out of reset the codec is at power-on defaults, so the route
+        and levels have to be re-applied or the next sound plays to the
+        wrong place -- or nowhere.
+        """
+        self._claim_periph_reset()
+        if self._periph_reset is None or not self._periph_idle:
+            return False
+        self._periph_reset.value = True
+        time.sleep(0.05)              # let the part come out of reset
+        self._periph_idle = False
+        print("Audio: amp released from reset")
+        if self._sound_system == "FRUITJAM_DAC":
+            self.reinit_after_wake()
+        return True
+
+    def poll_amp_idle(self):
+        """Drop the amp into reset once it has been quiet long enough.
+
+        Called from the main loop. Does nothing while audio is playing, or
+        if the board has no reset pin wired.
+        """
+        if self._periph_idle or not self._periph_reset_pin_name:
+            return False
+        if self._periph_idle_timeout <= 0:
+            return False
+        if self._audio is not None and self._audio.playing:
+            self._last_play_end = time.monotonic()
+            return False
+        if time.monotonic() - self._last_play_end < self._periph_idle_timeout:
+            return False
+        return self.amp_idle()
+
+    def prepare_for_sleep(self):
+        """Called before the device sleeps: silence the amp."""
+        return self.amp_idle()
 
     def _apply_fruitjam_levels(self):
         """Restore our cached level settings on the TLV320DAC3100.
@@ -154,6 +229,140 @@ class AudioPlayer:
         """
         return "speaker" if status == 0 else "headphone"
 
+    def _arm_headset_detect(self, dac):
+        """Enable jack detection on the codec and return a settled reading."""
+        # detect_debounce=4 -> 256 ms hardware debounce
+        dac.set_headset_detect(True, detect_debounce=4, button_debounce=2)
+        time.sleep(0.2)
+        return self._settle_headset_status(dac)
+
+    def reinit_after_wake(self):
+        """Reprogram the codec after a sleep, and re-pick the route.
+
+        Sleep can cut the rail the codec sits on, and on battery that rail
+        is its only supply -- so it comes back at power-on defaults with
+        every register lost. Software still believed it was on the speaker,
+        and because set_audio_route() only reprograms the chip when its own
+        value CHANGES, nothing was ever re-applied. The device woke wired to
+        whatever the defaults were and ignored the socket from then on.
+
+        So this re-applies everything unconditionally rather than trusting
+        the cached state: clocks, jack detection, route and levels. It is
+        cheap and idempotent, and it is correct whether or not the codec
+        actually lost power -- which differs between USB and battery, and is
+        not worth trying to detect.
+        """
+        if self._sound_system != "FRUITJAM_DAC":
+            return False
+        # Writes go nowhere while the part is held in reset.
+        if self._periph_reset is not None and self._periph_idle:
+            self._periph_reset.value = True
+            time.sleep(0.05)
+            self._periph_idle = False
+        dac = self._peripherals.dac
+
+        try:
+            dac.configure_clocks(sample_rate=self._current_rate, bit_depth=16)
+        except Exception as e:
+            print("Audio: clock reconfigure failed:", type(e).__name__, e)
+
+        status = 0
+        if self._headset_detect_enabled:
+            try:
+                status = self._arm_headset_detect(dac)
+            except Exception as e:
+                print("Audio: jack re-arm failed:", type(e).__name__, e)
+            self._last_hp_status = status
+            self._hp_pending_status = status
+            self._hp_pending_since = time.monotonic()
+            self._last_hp_poll = 0.0
+            wanted = self._wanted_route_from(status)
+        else:
+            wanted = self.audio_route or self._config.get(
+                "audio_output_default", "speaker")
+
+        # Drop the cached value so set_audio_route always reaches the chip.
+        # Skipping this is what left the codec unprogrammed after a wake.
+        self.audio_route = None
+        try:
+            self.set_audio_route(wanted)
+            print("Audio: codec reprogrammed after wake — status=%d route=%s"
+                  % (status, wanted))
+        except Exception as e:
+            print("Audio: route restore failed:", type(e).__name__, e)
+            return False
+        return True
+
+    def resync_headset_detect(self):
+        """Re-arm jack detection and re-pick the route after waking.
+
+        set_headset_detect() was only ever called once, at startup, and the
+        codec's detect configuration does not survive a sleep cycle on every
+        board. Waking could leave the detector stuck on whatever it last
+        reported: the route then settled on that value and the socket stopped
+        having any effect at all -- plugging in, playing, and unplugging
+        changed nothing.
+
+        Re-arming costs a fraction of a second on wake and makes the jack
+        behave the same before and after sleep.
+        """
+        if not self._headset_detect_enabled:
+            return False
+        if self._sound_system != "FRUITJAM_DAC":
+            return False
+        try:
+            status = self._arm_headset_detect(self._peripherals.dac)
+        except Exception as e:
+            print("Audio: jack re-arm failed:", type(e).__name__, e)
+            return False
+
+        # Reset the debounce state too, so the poll judges the fresh reading
+        # rather than comparing it against whatever was pending before sleep.
+        self._last_hp_status = status
+        self._hp_pending_status = status
+        self._hp_pending_since = time.monotonic()
+        self._last_hp_poll = 0.0
+
+        wanted = self._wanted_route_from(status)
+        if wanted != self.audio_route:
+            self.set_audio_route(wanted)
+            print("Audio: jack re-armed after wake — status=%d -> %s"
+                  % (status, wanted))
+        else:
+            print("Audio: jack re-armed after wake — status=%d, route %s"
+                  % (status, self.audio_route))
+        return True
+
+    def _settle_headset_status(self, dac, timeout=1.5, need=5):
+        """Read the jack until the value holds still, or report empty.
+
+        A single reading taken just after enabling detection is not
+        trustworthy: the detector can briefly report a plug that is not
+        there, and the device then boots routed to a headphone amp with
+        nothing in the socket -- silent, and it stays that way until a real
+        plug event happens to correct it.
+
+        Requiring the reading to repeat costs a fraction of a second at
+        startup. If it will not settle, report 0 (empty): erring towards the
+        onboard speaker is audible in the room, while erring towards the
+        jack is silence.
+        """
+        stable = 0
+        value = 0
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            reading = dac.headset_status
+            if reading == value:
+                stable += 1
+                if stable >= need:
+                    return value
+            else:
+                value = reading
+                stable = 1
+            time.sleep(0.08)
+        print("Audio: jack reading unsettled — assuming nothing plugged in")
+        return 0
+
     def poll_headset_detect(self):
         """Poll the 3.5 mm jack and auto-route on a stable plug change.
 
@@ -167,6 +376,12 @@ class AudioPlayer:
         if not self._headset_detect_enabled:
             return False
         if self._sound_system != "FRUITJAM_DAC":
+            return False
+        # Nothing to read while the part is held in reset -- the I2C access
+        # just errors ("No such device") once per poll. Detection resumes
+        # when the amp wakes, and reinit_after_wake() re-reads the jack
+        # before the next sound plays, so the route is still right.
+        if self._periph_idle:
             return False
         now = time.monotonic()
         if now - self._last_hp_poll < self._hp_poll_interval:
@@ -251,6 +466,8 @@ class AudioPlayer:
             sound_file = self._storage.resolve_path(sound_file)
 
         print("Audio: playing", sound_file)
+        # The amp may be sitting in reset from the idle timeout or a sleep.
+        self.amp_wake()
         f = None
         try:
             f = open(sound_file, "rb")
@@ -288,6 +505,7 @@ class AudioPlayer:
                 time.sleep(0.01)
             time.sleep(0.05)  # Let last buffer drain
             self._audio.stop()
+            self._last_play_end = time.monotonic()
             print("Audio: done")
         except Exception as e:
             print("Audio: ERROR:", e)

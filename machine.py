@@ -207,6 +207,7 @@ class Machine:
         # Sleep / power management
         self.sleep = SleepManager(self._config)
         self.sleep.set_pixel(self._pixel)
+        self.sleep.set_audio(self.audio)
         self.sleep.set_input(self.input)
         self.sleep.set_display(self.display)
         if self._peripherals:
@@ -473,6 +474,10 @@ class Machine:
                 if woke:
                     wake_until = time.monotonic() + wake_grace
                     print("Wake grace: ignoring input for {}s".format(wake_grace))
+                    # Sleep can cut the rail the codec sits on, so its
+                    # registers may be gone. Reprogram it rather than trust
+                    # the cached route, or it wakes stuck on one output.
+                    self.audio.reinit_after_wake()
             # Keyboard/encoder navigation: keep the highlight + hint text in
             # sync with the current selection as it moves between presses.
             if (self._has_encoder_nav
@@ -487,6 +492,9 @@ class Machine:
             # headset_detect_enabled did nothing on any variant that set it.
             # The poll rate-limits itself and no-ops while a sound is playing.
             self.audio.poll_headset_detect()
+            # Drop the amp into reset once it has been quiet long enough --
+            # it hisses and draws current the whole time it is running.
+            self.audio.poll_amp_idle()
             time.sleep(0.01)
 
     def _check_lang_encoder(self):
