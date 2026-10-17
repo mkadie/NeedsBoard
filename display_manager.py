@@ -4,6 +4,7 @@ Handles display initialization, background image loading,
 and screen-coordinate-to-button-grid mapping.
 """
 
+import time
 import displayio
 import fourwire
 import busio
@@ -51,12 +52,18 @@ class DisplayManager:
             self._init_ssd1306(config)
         elif display_type == "FRUITJAM_DVI":
             self._init_fruitjam_dvi(config)
+        elif display_type == "BLINKA_PYGAME":
+            self._init_blinka_pygame(config)
         else:
             self._init_spi_display(config, spi)
 
         # Display group
         self._splash = displayio.Group()
         self._display.root_group = self._splash
+
+        # Built on first sleep — a full-screen black fill used to blank the
+        # panel without touching the controller's sleep mode.
+        self._blank_group = None
 
         # Selection highlight overlay
         self._highlight = None
@@ -105,6 +112,28 @@ class DisplayManager:
         print("DVI ready: %dx%d fb -> %dx%d hdmi" % (
             self._width, self._height,
             self._width * scale, self._height * scale))
+
+    def _init_blinka_pygame(self, config):
+        """Bring up an HDMI displayio surface on a Raspberry Pi via Blinka.
+
+        Uses pi_blinka/display_backend.make_display(), which returns a
+        LogicalDisplay: the app keeps drawing at logical screen_width x
+        screen_height while the backend scales/pillarboxes to the physical HDMI
+        mode (auto-detected per board). Only runs under Blinka (CPython3); the
+        import is local so the CircuitPython targets never touch it.
+
+        The caller (machine.py) must call display_backend.service() once per main
+        loop to pump events + refresh — PyGame can't refresh from a thread.
+        """
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "pi_blinka"))
+        from display_backend import make_display
+        self._spi = None
+        self._display_bus = None
+        self._backlight = None
+        self._display = make_display(config)
 
     def _init_spi_display(self, config, spi):
         """Initialize SPI color display (ILI9341 or ST7735R)."""
@@ -408,35 +437,106 @@ class DisplayManager:
         """Put display into low-power mode.
 
         SSD1306: DISPLAYOFF (0xAE) — drops to ~10uA
-        ILI9341/ST7735R: SLPIN (0x10) — drops to ~0.1mA
+        ILI9341/ST7735R: DISPOFF (0x28) then SLPIN (0x10) — ~0.1mA
+
+        The panel is blanked before sleeping it: SLPIN alone stops the
+        booster while the driver still thinks it is displaying, which on
+        the ST7735R leaves a fading ghost of the last frame.
         """
-        if not hasattr(self, '_display_bus'):
-            return
-        try:
-            if self._text_mode:
-                self._display_bus.send(0xAE, b"")  # SSD1306 DISPLAYOFF
-            else:
-                self._display_bus.send(0x10, b"")  # ILI9341 SLPIN
-        except:
-            pass
+        if self._text_mode:
+            if hasattr(self, '_display_bus'):
+                try:
+                    self._display_bus.send(0xAE, b"")  # SSD1306 DISPLAYOFF
+                except:
+                    pass
+        else:
+            # Colour panels blank through displayio, not SLPIN. Panel sleep
+            # saves about 0.1 mA and costs a screen that does not come back:
+            # SLPOUT is not guaranteed to preserve the controller's RAM, and
+            # displayio then has no dirty region, so it sends nothing and the
+            # panel stays black. Swapping the root group is pure displayio --
+            # it always repaints -- and on boards with a real backlight pin
+            # the saving comes from the backlight anyway.
+            self._show_blank()
+        self.set_backlight(False)
 
     def wake_display(self):
-        """Wake display from low-power mode.
+        """Wake display from low-power mode and put an image back on it.
 
         SSD1306: DISPLAYON (0xAF)
-        ILI9341/ST7735R: SLPOUT (0x11) + 120ms settle
+        ILI9341/ST7735R: SLPOUT (0x11) + 120ms settle + DISPON (0x29)
+
+        Sleep-out is not enough on its own. The panel needs DISPON to
+        re-enable output, its RAM is not guaranteed to survive the sleep,
+        and displayio only pushes pixels it believes have changed — so
+        without a forced redraw the screen comes back blank. The backlight
+        is switched on last, so the panel is never lit while empty.
         """
-        if not hasattr(self, '_display_bus'):
+        if self._text_mode:
+            if hasattr(self, '_display_bus'):
+                try:
+                    self._display_bus.send(0xAF, b"")  # SSD1306 DISPLAYON
+                except:
+                    pass
+        else:
+            self.refresh()
+        self.set_backlight(True)
+
+    def rebuild(self):
+        """Re-initialise the panel after it has lost power.
+
+        Sleep can cut the rail that feeds the display, which leaves the
+        controller unconfigured -- its registers and RAM are gone, and
+        re-sending pixels to it achieves nothing. Building a fresh driver
+        and re-attaching the existing groups brings the screen back without
+        rebooting the board, which is what the old wake path resorted to.
+
+        No-op on text-mode displays, which are not on a switched rail.
+        """
+        if self._text_mode or self._display is None:
+            return False
+        try:
+            displayio.release_displays()
+            time.sleep(0.1)
+            # Hand back the existing SPI bus: it survives the rail cut (the
+            # MCU pins never lost power), and re-claiming SCK/MOSI/MISO
+            # would collide with the bus this object already holds.
+            self._init_spi_display(self._config, self._spi)
+            self._display.root_group = self._splash
+            print("Display: rebuilt after power loss")
+            return True
+        except Exception as e:
+            print("Display: rebuild failed:", type(e).__name__, e)
+            return False
+
+    def _show_blank(self):
+        """Put a full-screen black bitmap up, so the panel reads as off."""
+        if self._display is None:
+            return
+        if getattr(self, "_blank_group", None) is None:
+            bmp = displayio.Bitmap(self._width, self._height, 1)
+            pal = displayio.Palette(1)
+            pal[0] = 0x000000
+            self._blank_group = displayio.Group()
+            self._blank_group.append(
+                displayio.TileGrid(bmp, pixel_shader=pal))
+        try:
+            self._display.root_group = self._blank_group
+        except Exception as e:
+            print("Display: blank failed:", e)
+
+    def refresh(self):
+        """Put the real screen contents back and force a repaint.
+
+        Re-attaching the root group is what marks the whole frame dirty;
+        displayio otherwise believes nothing changed and sends nothing.
+        """
+        if self._display is None or self._splash is None:
             return
         try:
-            if self._text_mode:
-                self._display_bus.send(0xAF, b"")  # SSD1306 DISPLAYON
-            else:
-                self._display_bus.send(0x11, b"")  # ILI9341 SLPOUT
-                import time
-                time.sleep(0.12)
-        except:
-            pass
+            self._display.root_group = self._splash
+        except Exception as e:
+            print("Display: refresh failed:", e)
 
     @property
     def display(self):

@@ -78,8 +78,9 @@ class SleepManager:
         # the inactive level. Used by boards whose enable net must float off.
         self._full_power_off_release = config.get("full_power_off_release", False)
         self._full_power_settle_ms = config.get("full_power_settle_ms", 500)
-        self._periph_reset_pin_name = config.get("periph_reset_pin")
-        self._periph_reset = None  # DigitalInOut, claimed during idle
+        # The peripheral-reset pin belongs to AudioPlayer -- one owner, so
+        # sleep, the idle timeout and playback cannot fight over it.
+        self._audio_player = None
 
         # If alarm module not available, fall back to software_idle
         if self._enabled and not _HAS_ALARM:
@@ -92,8 +93,8 @@ class SleepManager:
                 self._timeout, self._mode))
             print("Sleep: wake pins:", self._wake_pin_names)
             if _HAS_SUPERVISOR and supervisor.runtime.usb_connected:
-                if self._mode == "software_idle":
-                    print("Sleep: USB connected — software idle still applies")
+                if self._config.get("sleep_on_usb", False):
+                    print("Sleep: USB connected — sleeping anyway (sleep_on_usb)")
                 else:
                     print("Sleep: USB connected — sleep suspended until unplugged")
         else:
@@ -110,6 +111,10 @@ class SleepManager:
     def set_display(self, display_manager):
         """Set DisplayManager reference for backlight control."""
         self._display = display_manager
+
+    def set_audio(self, audio_player):
+        """AudioPlayer, so sleep can silence the amp before idling."""
+        self._audio_player = audio_player
 
     def set_peripherals(self, peripherals):
         """Set Fruit Jam Peripherals reference for software_idle shutdown."""
@@ -134,11 +139,16 @@ class SleepManager:
         if not self._enabled:
             return False
 
-        # Don't sleep while connected to USB — light sleep causes
-        # USB disconnect which triggers auto-reload (looks like a reboot).
-        # Software idle is safe over USB (no USB disconnect), so allow it.
+        # USB means external power, and on a board with a battery it means
+        # charging. There is nothing to save, and a device that blanks itself
+        # on the charger just looks broken. Software idle used to be exempted
+        # here because it does not drop the USB link the way light sleep
+        # does -- but "can" is not "should".
+        #
+        # sleep_on_usb re-enables it, which bench work needs: sleeping on the
+        # cable is the only way to watch a sleep cycle over serial.
         if _HAS_SUPERVISOR and supervisor.runtime.usb_connected:
-            if self._mode != "software_idle":
+            if not self._config.get("sleep_on_usb", False):
                 return False
 
         elapsed = time.monotonic() - self._last_activity
@@ -212,51 +222,51 @@ class SleepManager:
 
         print("Sleep: entering software idle...")
 
-        # Heavy: deinit Peripherals, cut FULL_POWER, reset on wake.
-        # Light: blank the panel and keep running.
+        # Whether the FULL_POWER rail may be dropped. Cutting it is what
+        # actually darkens a screen whose backlight has no pin of its own --
+        # blanking pixels leaves the backlight burning.
         #
-        # The choice is derived, not declared, because the failure it guards
-        # against is not obvious from a variant file: if the FULL_POWER rail
-        # also feeds the wake inputs, cutting it kills the very hardware that
-        # has to notice the wake, and the board never comes back. Variants
-        # state the board fact (full_power_feeds_inputs); the policy lives
-        # here so a user enabling sleep in config.txt cannot arm it by hand.
-        can_cut_power = (self._peripherals is not None
-                         or self._full_power is not None)
-        if can_cut_power and self._config.get("full_power_feeds_inputs", False):
-            print("Sleep: FULL_POWER feeds the wake inputs — staying powered")
-            can_cut_power = False
-        heavy_sleep = can_cut_power
+        # Derived from board facts rather than declared as a verb, because
+        # the failure it guards is invisible in a variant file: a rail that
+        # feeds the wake inputs takes the wake path down with it, and a rail
+        # that feeds a panel with its own backlight pin need not be cut at
+        # all. The policy lives here so a user enabling sleep from config.txt
+        # cannot arm it by hand.
+        #
+        # Waking no longer resets the board. That was the old "heavy" path,
+        # and repeated resets are how a board ended up sitting in the RP2350
+        # bootloader. The display is rebuilt in place instead -- bench-tested:
+        # the button still registers with the rail down, and the panel
+        # re-initialises after losing power.
+        cut_rail = self._full_power is not None
+        if cut_rail:
+            if self._config.get("full_power_feeds_inputs", False):
+                print("Sleep: FULL_POWER feeds the wake inputs — staying powered")
+                cut_rail = False
+            elif self._config.get("full_power_feeds_display", False):
+                print("Sleep: FULL_POWER feeds the panel — staying powered")
+                cut_rail = False
+        # Silence the amplifier first: held in reset it stops hissing and
+        # stops drawing. This used to live in a heavy-sleep branch that was
+        # retired, which left it never running at all.
+        if self._audio_player is not None:
+            self._audio_player.prepare_for_sleep()
 
-        if heavy_sleep:
-            # Heavy path: Fruit Jam — deinit hardware, reset on wake
-            if self._peripherals:
-                self._peripherals.deinit()
-                print("Sleep: Peripherals deinited")
+        # Blank the panel and turn off whatever has its own pin (backlight,
+        # amplifier, NeoPixel) on variants that wire them.
+        self._power_down()
+        if self._display:
+            self._display.sleep_display()
+            print("Sleep: display off")
 
-            if self._periph_reset_pin_name:
-                pin = _pin(self._periph_reset_pin_name)
-                self._periph_reset = digitalio.DigitalInOut(pin)
-                self._periph_reset.direction = digitalio.Direction.OUTPUT
-                self._periph_reset.value = False
-                print("Sleep: PERIPH_RESET held LOW")
-
-            if self._full_power:
-                if self._full_power_off_release:
-                    self._full_power.switch_to_input()
-                else:
-                    self._full_power.value = self._full_power_active_low
-                print("Sleep: FULL_POWER OFF")
-        else:
-            # Light path: blank the panel, keep the board powered so the
-            # wake inputs stay alive. SLPIN drops the ST7735R/ILI9341 to
-            # ~0.1 mA, SSD1306 to ~10 uA. _power_down() handles backlight,
-            # amplifier and NeoPixel where a variant has them (all three are
-            # unwired on the Fruit Jam clone, but the OLED badge uses them).
-            self._power_down()
-            if self._display:
-                self._display.sleep_display()
-                print("Sleep: display off (light sleep — hardware stays up)")
+        # Then drop the rail, where the board allows it. This is the only
+        # way to darken a backlight that has no pin of its own.
+        if cut_rail:
+            if self._full_power_off_release:
+                self._full_power.switch_to_input()
+            else:
+                self._full_power.value = self._full_power_active_low
+            print("Sleep: FULL_POWER OFF (rail down)")
 
         # Poll for wake — declared wake pins, plus encoder rotation.
         print("Sleep: idle, polling for wake...")
@@ -296,10 +306,11 @@ class SleepManager:
         # goes quiet for good. The alarm path already takes this stance.
         if not wake_inputs and encoder is None:
             print("Sleep: no wake source available — staying awake")
-            if not heavy_sleep:
-                if self._display:
-                    self._display.wake_display()
-                self._power_up()
+            if self._display:
+                self._display.wake_display()
+            self._power_up()
+            if self._audio_player is not None:
+                self._audio_player.amp_wake()
             if self._input and hasattr(self._input, '_reinit_encoder_button'):
                 self._input._reinit_encoder_button()
             self._last_activity = time.monotonic()
@@ -331,18 +342,23 @@ class SleepManager:
         if self._input and hasattr(self._input, 'reset_button_latch'):
             self._input.reset_button_latch()
 
-        if heavy_sleep:
-            # Heavy wake: full device reset
-            self._wake_from_idle()
-        else:
-            # Light wake: panel back on, then restore whatever
-            # _power_down() turned off, then reclaim the encoder button.
+        # Wake in place.
+        # Wake in place. Rail first: the panel has no power until it is
+        # back, and the controller lost its configuration with it, so the
+        # display is rebuilt rather than merely repainted.
+        if cut_rail and self._full_power:
+            self._full_power.switch_to_output(
+                value=not self._full_power_active_low)
+            time.sleep(self._full_power_settle_ms / 1000.0)
+            print("Sleep: FULL_POWER ON (rail up)")
             if self._display:
-                self._display.wake_display()
-                print("Sleep: display on")
-            self._power_up()
-            if self._input and hasattr(self._input, '_reinit_encoder_button'):
-                self._input._reinit_encoder_button()
+                self._display.rebuild()
+        if self._display:
+            self._display.wake_display()
+            print("Sleep: display on")
+        self._power_up()
+        if self._input and hasattr(self._input, '_reinit_encoder_button'):
+            self._input._reinit_encoder_button()
 
         self._last_activity = time.monotonic()
         return True
