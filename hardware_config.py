@@ -561,11 +561,16 @@ VARIANTS = {
         "encoder_button_pin": None,
         "encoder_button_index": 0,
 
-        "wake_button_pin": "BUTTON1",
+        # BUTTON1 is already claimed by direct_button_pins above; leaving a
+        # wake_button_pin here too would double-claim the pin and crash
+        # InputManager init. Onboard buttons handle wake via the grid.
+        "wake_button_pin": None,
         "wake_button_index": 0,
 
-        # Onboard 5x NeoPixel strip
-        "neopixel_pin": "NEOPIXEL",
+        # Onboard 5x NeoPixel strip — owned by the Fruit Jam Peripherals
+        # object (FRUITJAM_DAC init). Leave the machine's own status-LED pin
+        # unset so it doesn't double-claim NEOPIXEL and crash init.
+        "neopixel_pin": None,
         "neopixel_count": 5,
 
         # 4x2 = 8 cells, mapped 1:1 to keypad keys 1..8
