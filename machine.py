@@ -38,13 +38,33 @@ class Machine:
                  start_menu=None):
         """Build the machine from a named variant config.
 
+        Variant resolution order, first match wins:
+            1. variant_name argument (explicit caller intent)
+            2. `variant = NAME` in /config.txt (per-device, survives deploy.sh)
+            3. DEFAULT_VARIANT in hardware_config.py
+
         Args:
-            variant_name: Key into VARIANTS dict. Uses DEFAULT_VARIANT if None.
+            variant_name: Key into VARIANTS dict. Falls back to config.txt
+                then DEFAULT_VARIANT if None. An invalid name here raises,
+                whereas an invalid one in config.txt warns and falls back.
             menus_dir: Directory containing .menu files.
             start_menu: Filename of the starting menu.
         """
+        # Read config.txt before picking the variant: `variant = NAME` there is
+        # the per-device override. deploy.sh preserves an existing config.txt
+        # but overwrites hardware_config.py, so config.txt is the only setting
+        # that survives a deploy — DEFAULT_VARIANT is just the fallback for a
+        # device that hasn't declared one.
+        user_config = load_config("/config.txt")
+
         if variant_name is None:
-            variant_name = DEFAULT_VARIANT
+            variant_name = user_config.get("variant") or DEFAULT_VARIANT
+            # config.txt is hand-edited (often by teachers), so a typo must not
+            # brick the device — warn and fall back rather than raising.
+            if variant_name not in VARIANTS:
+                print("config.txt: unknown variant {!r}, using {}".format(
+                    variant_name, DEFAULT_VARIANT))
+                variant_name = DEFAULT_VARIANT
 
         if variant_name not in VARIANTS:
             raise ValueError("Unknown variant: " + variant_name)
@@ -52,8 +72,7 @@ class Machine:
         self._config = dict(VARIANTS[variant_name])  # Copy so overlay is safe
         self._menus_dir = menus_dir
 
-        # Load user config and overlay onto hardware defaults
-        user_config = load_config("/config.txt")
+        # Overlay the remaining user settings onto hardware defaults
         if user_config:
             apply_config(self._config, user_config)
             print("User config loaded ({} settings)".format(len(user_config)))
@@ -68,6 +87,22 @@ class Machine:
         if self._config.get("full_power_pin"):
             self._init_full_power()
 
+        # Pins held as inputs with pull-up (e.g. A4 / FULL_POWER net when the
+        # rail is hardwired). Keep references so CircuitPython doesn't garbage-
+        # collect them and release the pin.
+        self._input_pullups = []
+        _ip_pins = self._config.get("input_pullup_pins")
+        if _ip_pins:
+            import digitalio
+            for _pn in _ip_pins:
+                try:
+                    _io = digitalio.DigitalInOut(_pin(_pn))
+                    _io.switch_to_input(pull=digitalio.Pull.UP)
+                    self._input_pullups.append(_io)
+                except Exception as _e:
+                    print("input_pullup {} failed: {}".format(_pn, _e))
+            print("Input pull-ups configured:", _ip_pins)
+
         # Emergency push fast path: minimal DAC init, skip Peripherals
         emergency_held = self._check_emergency_pin()
         self._emergency_audio = None  # Holds I2S if emergency played
@@ -78,17 +113,47 @@ class Machine:
         # Fruit Jam Peripherals (full init for normal operation)
         self._peripherals = None
         if self._config["sound_system"] == "FRUITJAM_DAC":
-            self._init_fruitjam_peripherals()
+            try:
+                self._init_fruitjam_peripherals()
+            except Exception as e:
+                # An unreachable DAC (the classic cause is unpopulated I2C
+                # pull-ups, which make Peripherals() raise) used to take the
+                # whole device down mid-boot: no display, no menu, no encoder.
+                # Degrade to the silent path instead — sound_system stays a
+                # declaration of intent rather than something a human has to
+                # hand-edit after a hardware fault. AudioPlayer already treats
+                # "NONE" as a no-op throughout.
+                print("Audio: DAC init failed ({}: {}) — running silent".format(
+                    type(e).__name__, e))
+                self._peripherals = None
+                self._config["sound_system"] = "NONE"
 
         # Deferred imports — after emergency sound finishes (if any)
         import busio
         from storage_manager import StorageManager
         from display_manager import DisplayManager
-        from audio_player import AudioPlayer
-        from input_manager import InputManager
         from menu_parser import MenuStack
         from action import Action
         from sleep_manager import SleepManager
+
+        # Audio + input: on the Blinka (Linux) target the CircuitPython
+        # AudioPlayer (imports audiomp3) and the USB-host InputManager path
+        # import MCU-only modules, so swap in the pi_blinka/ backends. The
+        # display stays in DisplayManager (BLINKA_PYGAME branch) so its menu /
+        # highlight / background logic is reused unchanged.
+        self._blinka_display_service = None
+        if self._config.get("platform") == "blinka":
+            import sys
+            import os
+            sys.path.insert(0, os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "pi_blinka"))
+            from audio_backend import BlinkaAudioPlayer as AudioPlayer
+            from input_backend import EvdevKeyboardInput as InputManager
+            from display_backend import service as _blinka_display_service
+            self._blinka_display_service = _blinka_display_service
+        else:
+            from audio_player import AudioPlayer
+            from input_manager import InputManager
 
         # Status LED (optional)
         self._pixel = None
@@ -307,10 +372,17 @@ class Machine:
             print("Items:", len(self._menu_stack.items))
         self.set_status("ready")
 
-        # Encoder is repurposed as a language switcher on touch-input
-        # variants (CYD_PLUS). Skip menu-highlight wiring entirely so
-        # encoder rotation only drives the language overlay, not menu nav.
-        self._has_encoder_nav = False
+        # Menu-highlight wiring follows the variant's encoder_navigation flag.
+        # Variants that repurpose the encoder as a language switcher (CYD_PLUS,
+        # FRUITJAM_DVI_ENC) already set encoder_navigation False in their own
+        # config, so rotation there drives the overlay instead of menu nav —
+        # no need to hardcode it off here (doing so regressed every
+        # encoder-nav variant).
+        self._has_encoder_nav = self._config.get("encoder_navigation", False)
+        # Keyboard-navigation variants (PI_BLINKA / evdev): arrow keys move
+        # the selection, so the menu highlight must follow it.
+        if self._config.get("input_type") == "EVDEV_KEYBOARD":
+            self._has_encoder_nav = True
         self._last_shown_index = -1
         self._emergency_hold_enabled = self._config.get("emergency_hold_enabled", True)
         self._emergency_hold_time = self._config.get("emergency_hold_seconds", 3)
@@ -324,12 +396,17 @@ class Machine:
         self._lang_index = 0
         self._lang_timeout = 0
         self._lang_revert_menu = None
-        try:
-            from stim_games.multi_lingual import LANGUAGES as _L
-            self._LANGUAGES = _L
-        except Exception as e:
-            print("Lang switcher: multi_lingual import failed:", e)
-            self._LANGUAGES = ()
+        # Only claim encoder rotation for the overlay when the variant asks
+        # for it. Left ungated, this hijacked rotation on every build that
+        # merely had multi_lingual.py on the filesystem, so menu nav never
+        # saw a turn. Empty tuple makes _check_lang_encoder() a no-op.
+        self._LANGUAGES = ()
+        if self._config.get("language_switcher_enabled", False):
+            try:
+                from stim_games.multi_lingual import LANGUAGES as _L
+                self._LANGUAGES = _L
+            except Exception as e:
+                print("Lang switcher: multi_lingual import failed:", e)
         enc = getattr(self.input, "_encoder", None)
         self._lang_last_pos = enc.position if enc is not None else 0
         self._lang_flip = getattr(self.input, "_encoder_flip", 1)
@@ -358,6 +435,14 @@ class Machine:
         wake_until = 0
 
         while True:
+            # Blinka/PyGame: pump events + push the framebuffer to HDMI each
+            # iteration (no thread-driven auto-refresh). Returns False on window
+            # close / quit.
+            if self._blinka_display_service is not None:
+                if not self._blinka_display_service(self.display.display):
+                    print("Display closed — exiting.")
+                    return
+
             # Sample encoder-button state BEFORE poll() consumes it, so
             # we can attribute the upcoming press to encoder vs. touch.
             enc_btn_down = bool(getattr(self.input, "encoder_button_held", False))
@@ -371,10 +456,15 @@ class Machine:
                         # encoder button → commit the highlighted language.
                         self._lang_commit(self._lang_index)
                         self._lang_active = False
-                    elif enc_btn_down:
+                    elif enc_btn_down and self._LANGUAGES:
                         # No overlay active → cycle directly to the next
                         # language. Lets a single encoder/BUTTON3 tap rotate
                         # languages even when encoder rotation isn't wired.
+                        # Gated on _LANGUAGES: an empty tuple means the variant
+                        # has no language switcher, and without this guard the
+                        # branch swallowed EVERY encoder press (cycle_next
+                        # no-ops on an empty list), so _handle_press never ran
+                        # and pressing a cell played nothing.
                         self._lang_cycle_next()
                     else:
                         self._handle_press(button)
@@ -383,6 +473,12 @@ class Machine:
                 if woke:
                     wake_until = time.monotonic() + wake_grace
                     print("Wake grace: ignoring input for {}s".format(wake_grace))
+            # Keyboard/encoder navigation: keep the highlight + hint text in
+            # sync with the current selection as it moves between presses.
+            if (self._has_encoder_nav
+                    and self.input.selected_index != self._last_shown_index):
+                self.display.set_highlight(self.input.selected_index)
+                self._update_text_for_index(self.input.selected_index)
             if self._emergency_hold_enabled:
                 self._check_emergency_hold()
             self._check_lang_encoder()
